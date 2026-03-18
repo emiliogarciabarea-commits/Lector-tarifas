@@ -2,71 +2,68 @@ import requests
 import re
 import json
 import pandas as pd
-import os
-
-def clean_value(val, default=0.0):
-    """Convierte a float de forma segura."""
-    try:
-        if val is None or val == "" or str(val).lower() == "nan":
-            return default
-        # Limpiar símbolos si los hubiera
-        num_str = str(val).replace('€', '').replace(',', '.').strip()
-        return float(num_str)
-    except:
-        return default
 
 def scraper_tarifas():
     url = "https://www.simuladorfacturaluz.es/tarifas-de-luz/"
-    # User-Agent real para evitar bloqueos y que la pantalla no se quede en "negro"
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
     
     try:
-        print("🌐 Conectando con la web...")
-        res = requests.get(url, headers=headers, timeout=15)
-        res.raise_for_status()
+        print("Conectando...")
+        res = requests.get(url, headers=headers, timeout=20)
         
-        # Buscar la base de datos en el JS
+        # Extraemos el bloque de datos
         match = re.search(r'var\s+tarifas_bd\s*=\s*(\{.*?\});', res.text, re.DOTALL)
         if not match:
-            print("❌ Error: No se encontró la variable 'tarifas_bd'.")
+            print("No se encontraron los datos en la web.")
             return
 
-        datos_raw = json.loads(match.group(1))
-        lista_final = []
+        tarifas_dict = json.loads(match.group(1))
+        datos_limpios = []
 
-        for info in datos_raw.values():
-            # Extraer y limpiar
-            e1 = clean_value(info.get('e1'))
-            e2 = clean_value(info.get('e2'), default=e1) # Si no hay E2, usa E1
-            e3 = clean_value(info.get('e3'), default=e1) # Si no hay E3, usa E1
-            fv = clean_value(info.get('fvexc'), default=0.0)
+        for key in tarifas_dict:
+            t = tarifas_dict[key]
+            
+            # Limpieza de valores numéricos
+            def to_f(val):
+                if val is None or val == "" or str(val).lower() == "nan": return None
+                return float(str(val).replace(',', '.'))
 
-            fila = {
-                'Compañía': info.get('cia', 'Desconocida'),
-                'Tarifa': info.get('nom', 'Sin nombre'),
-                'P1_€/kW_dia': clean_value(info.get('p1')),
-                'P2_€/kW_dia': clean_value(info.get('p2')),
-                'E1_€/kWh': e1,
-                'E2_€/kWh': e2,
-                'E3_€/kWh': e3,
-                'FV_Excedentes': fv
-            }
-            lista_final.append(fila)
+            # Obtener valores base
+            p1 = to_f(t.get('p1', 0))
+            p2 = to_f(t.get('p2', p1)) # Si P2 es nulo, usa P1
+            e1 = to_f(t.get('e1', 0))
+            e2 = to_f(t.get('e2', e1)) # REGLA: Si no hay E2, usa E1
+            e3 = to_f(t.get('e3', e1)) # REGLA: Si no hay E3, usa E1
+            fv = to_f(t.get('fvexc', 0)) # REGLA: Si no hay FV, usa 0
 
-        # Crear DataFrame
-        df = pd.DataFrame(lista_final)
+            datos_limpios.append({
+                'Compania': str(t.get('cia', 'S/D')).strip(),
+                'Tarifa': str(t.get('nom', 'S/D')).strip(),
+                'P1': p1,
+                'P2': p2,
+                'E1': e1,
+                'E2': e2,
+                'E3': e3,
+                'FV': fv
+            })
+
+        # Crear el DataFrame
+        df = pd.DataFrame(datos_limpios)
+
+        # 1. Guardar como CSV estándar (punto para decimales, coma para separar)
+        df.to_csv('tarifas_luz.csv', index=False, sep=',', encoding='utf-8')
         
-        # Guardar archivos
-        df.to_csv('tarifas_luz.csv', index=False, encoding='utf-8-sig')
+        # 2. Guardar como Excel
         df.to_excel('tarifas_luz.xlsx', index=False)
-        
-        print(f"✅ ¡Éxito! Se han procesado {len(df)} tarifas.")
-        print("📁 Archivos generados: tarifas_luz.csv y tarifas_luz.xlsx")
-        
+
+        print(f"Éxito: {len(df)} tarifas procesadas.")
+        # Imprimimos las primeras 5 para verificar en el log de GitHub
+        print(df.head().to_string())
+
     except Exception as e:
-        print(f"❌ Error crítico: {e}")
+        print(f"Error: {str(e)}")
 
 if __name__ == "__main__":
     scraper_tarifas()
