@@ -2,59 +2,71 @@ import requests
 import re
 import json
 import pandas as pd
+import os
+
+def clean_value(val, default=0.0):
+    """Convierte a float de forma segura."""
+    try:
+        if val is None or val == "" or str(val).lower() == "nan":
+            return default
+        # Limpiar símbolos si los hubiera
+        num_str = str(val).replace('€', '').replace(',', '.').strip()
+        return float(num_str)
+    except:
+        return default
 
 def scraper_tarifas():
     url = "https://www.simuladorfacturaluz.es/tarifas-de-luz/"
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    # User-Agent real para evitar bloqueos y que la pantalla no se quede en "negro"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
     
-    print("Iniciando extracción de 70+ tarifas...")
-    res = requests.get(url, headers=headers)
-    
-    # Extraer el JSON oculto en la variable JS 'tarifas_bd'
-    match = re.search(r'var\s+tarifas_bd\s*=\s*(\{.*?\});', res.text, re.DOTALL)
-    if not match:
-        return "No se pudo encontrar la base de datos."
-
-    datos_raw = json.loads(match.group(1))
-    lista_final = []
-
-    for id_t, info in datos_raw.items():
-        # Extraer valores base
-        p1 = pd.to_numeric(info.get('p1'), errors='coerce')
-        p2 = pd.to_numeric(info.get('p2'), errors='coerce')
-        e1 = pd.to_numeric(info.get('e1'), errors='coerce')
-        e2 = pd.to_numeric(info.get('e2'), errors='coerce')
-        e3 = pd.to_numeric(info.get('e3'), errors='coerce')
-        fv = pd.to_numeric(info.get('fvexc'), errors='coerce')
-
-        # LÓGICA DE RELLENO SOLICITADA:
-        # 1. Si E2 o E3 están vacíos, copiar E1
-        val_e2 = e2 if pd.notnull(e2) else e1
-        val_e3 = e3 if pd.notnull(e3) else e1
+    try:
+        print("🌐 Conectando con la web...")
+        res = requests.get(url, headers=headers, timeout=15)
+        res.raise_for_status()
         
-        # 2. Si FV está vacío, poner 0
-        val_fv = fv if pd.notnull(fv) else 0.0
+        # Buscar la base de datos en el JS
+        match = re.search(r'var\s+tarifas_bd\s*=\s*(\{.*?\});', res.text, re.DOTALL)
+        if not match:
+            print("❌ Error: No se encontró la variable 'tarifas_bd'.")
+            return
 
-        fila = {
-            'Compañía': info.get('cia'),
-            'Tarifa': info.get('nom'),
-            'P1_eur_kw_dia': p1,
-            'P2_eur_kw_dia': p2,
-            'E1_eur_kwh': e1,
-            'E2_eur_kwh': val_e2,
-            'E3_eur_kwh': val_e3,
-            'FV_Excedentes': val_fv
-        }
-        lista_final.append(fila)
+        datos_raw = json.loads(match.group(1))
+        lista_final = []
 
-    df = pd.DataFrame(lista_final)
-    
-    # Guardar resultados
-    df.to_csv('tarifas_luz_completo.csv', index=False, encoding='utf-8-sig')
-    df.to_excel('tarifas_luz_completo.xlsx', index=False)
-    
-    print(f"Proceso finalizado. {len(df)} tarifas guardadas.")
-    return df
+        for info in datos_raw.values():
+            # Extraer y limpiar
+            e1 = clean_value(info.get('e1'))
+            e2 = clean_value(info.get('e2'), default=e1) # Si no hay E2, usa E1
+            e3 = clean_value(info.get('e3'), default=e1) # Si no hay E3, usa E1
+            fv = clean_value(info.get('fvexc'), default=0.0)
+
+            fila = {
+                'Compañía': info.get('cia', 'Desconocida'),
+                'Tarifa': info.get('nom', 'Sin nombre'),
+                'P1_€/kW_dia': clean_value(info.get('p1')),
+                'P2_€/kW_dia': clean_value(info.get('p2')),
+                'E1_€/kWh': e1,
+                'E2_€/kWh': e2,
+                'E3_€/kWh': e3,
+                'FV_Excedentes': fv
+            }
+            lista_final.append(fila)
+
+        # Crear DataFrame
+        df = pd.DataFrame(lista_final)
+        
+        # Guardar archivos
+        df.to_csv('tarifas_luz.csv', index=False, encoding='utf-8-sig')
+        df.to_excel('tarifas_luz.xlsx', index=False)
+        
+        print(f"✅ ¡Éxito! Se han procesado {len(df)} tarifas.")
+        print("📁 Archivos generados: tarifas_luz.csv y tarifas_luz.xlsx")
+        
+    except Exception as e:
+        print(f"❌ Error crítico: {e}")
 
 if __name__ == "__main__":
     scraper_tarifas()
