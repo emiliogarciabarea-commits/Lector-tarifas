@@ -5,7 +5,21 @@ import io
 import re
 
 st.set_page_config(page_title="Extractor Tarifas", layout="wide")
-st.title("📊 Extractor de Tarifas de Luz - Versión Final")
+st.title("📊 Extractor de Tarifas de Luz - Formato Excel Exacto")
+
+# Base de datos de nombres extraída de tu Excel
+DB_NOMBRES = [
+    "Iberdrola Plan Online", "Iberdrola Plan Online 3 periodos", "Iberdrola Plan Más Ahorro",
+    "Iberdrola Plan Estable", "Iberdrola Plan Verano", "Iberdrola Plan Solar",
+    "Iberdrola Plan Ahorro Solar", "Iberdrola Plan Ahorro Inteligente",
+    "Endesa Tarifa Fija 24H Online", "Endesa Tarifa Fija 24h Promo", "Endesa Conecta",
+    "Endesa One Luz", "Endesa One Luz 3 Periodos", "Endesa Tempo Happy 2Horas",
+    "Endesa Tempo Happy 50Horas", "Endesa Tempo Happy Domingos", "Naturgy Uso Luz",
+    "Naturgy Tarifa Noche", "Naturgy Solar", "Repsol Ahorro Plus", "Repsol Ahorro Potencia",
+    "Repsol Tarifa Solar", "Repsol Tranquilísima", "TotalEnergies A tu Aire Siempre",
+    "TotalEnergies A tu Aire Programa Tu Ahorro", "Plenitude Fácil", "Gana Energia Online",
+    "Gana Energia Sin Líos"
+]
 
 def obtener_datos():
     url = "https://www.simuladorfacturaluz.es/sfl_api/?func=get_html_tarifas_luz"
@@ -20,14 +34,20 @@ def limpiar_y_extraer(texto, patron):
         return float(match.group(1).replace(',', '.'))
     return None
 
-def normalizar_nombre(nombre):
-    # 1. Eliminar espacios en blanco extra al principio y al final
-    # 2. Reemplazar saltos de línea o múltiples espacios por uno solo
-    nombre_limpio = " ".join(str(nombre).split())
-    # 3. (Opcional) Si en tu Excel solo quieres "Iberdrola Plan Online" 
-    # y la web trae fechas, puedes usar regex para cortar antes de la fecha.
-    nombre_limpio = re.split(r'\d{2}\s\w{3}\s\d{4}', nombre_limpio)[0].strip()
-    return nombre_limpio
+def normalizar_con_db(nombre_web):
+    nombre_web = " ".join(str(nombre_web).split())
+    # Comparar primeras 3 palabras
+    palabras_web = nombre_web.lower().split()[:3]
+    inicio_web = " ".join(palabras_web)
+
+    for nombre_limpio in DB_NOMBRES:
+        palabras_db = nombre_limpio.lower().split()[:3]
+        inicio_db = " ".join(palabras_db)
+        if inicio_web == inicio_db:
+            return nombre_limpio
+    
+    # Si no hay match, devolver nombre limpio sin fechas
+    return re.split(r'\d{2}\s\w{3}\s\d{4}', nombre_web)[0].strip()
 
 if st.button('Generar Tabla Completa'):
     try:
@@ -37,14 +57,11 @@ if st.button('Generar Tabla Completa'):
         for _, fila in df.iterrows():
             if len(fila) < 4: continue
             
-            # Aplicamos la normalización al nombre de la compañía
-            compania_raw = str(fila.iloc[2])
-            compania = normalizar_nombre(compania_raw)
-            
+            compania = normalizar_con_db(fila.iloc[2])
             detalles = str(fila.iloc[3])
             
-            # FILTROS: Si "Indexado" o "3.0TD" está en el nombre, saltamos
-            if "indexado" in compania.lower() or "3.0td" in compania.lower():
+            # Filtros requeridos
+            if any(x in compania.lower() for x in ["indexado", "3.0td"]):
                 continue
             
             if compania != 'nan' and 'Potencia' in detalles:
@@ -54,29 +71,32 @@ if st.button('Generar Tabla Completa'):
                 e2 = limpiar_y_extraer(detalles, "E2") or e1
                 e3 = limpiar_y_extraer(detalles, "E3") or e2
                 
-                # Lógica FV exacta
                 match_fv = re.search(r"FV\.EXC:\s*([\d]+[\.,][\d]+)\s*€/kWh", detalles, re.IGNORECASE)
                 fv = float(match_fv.group(1).replace(',', '.')) if match_fv else 0.0
                 
                 datos_finales.append({
                     "Compañía suministradora": compania,
-                    "Potencia: Periodo Punta": p1,
-                    "Potencia: Periodo Valle": p2,
-                    "Energía: Periodo Punta": e1,
-                    "Energía: Periodo Llano": e2,
-                    "Energía: Periodo Valle": e3,
-                    "Precio Excedentes (€/kWh)": fv
+                    "Periodo Punta": p1,
+                    "Periodo Valle": p2,
+                    "Periodo Punta ": e1, # Espacio para diferenciar columnas
+                    "Periodo Llano": e2,
+                    "Periodo Valle ": e3,
+                    "Precio Excedentes en €/kWh": fv
                 })
 
         df_final = pd.DataFrame(datos_finales)
         
         if not df_final.empty:
-            df_final = df_final.iloc[1:] # Eliminar fila 0 (Generalmente encabezados basura)
-        
-        st.dataframe(df_final, use_container_width=True)
-        
-        csv = df_final.to_csv(index=False).encode('utf-8')
-        st.download_button("Descargar CSV", csv, "tarifas_finales.csv", "text/csv")
+            df_final = df_final.iloc[1:].reset_index(drop=True)
+            st.dataframe(df_final, use_container_width=True)
+            
+            # Generar Excel
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df_final.to_excel(writer, index=False, sheet_name='Tarifas')
+            
+            st.download_button("📥 Descargar Excel Actualizado", output.getvalue(), 
+                               "tarifas_actualizadas.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         
     except Exception as e:
         st.error(f"Error técnico: {e}")
