@@ -5,7 +5,7 @@ import io
 import re
 
 st.set_page_config(page_title="Extractor Tarifas", layout="wide")
-st.title("📊 Extractor de Tarifas de Luz - Versión Final")
+st.title("📊 Extractor de Tarifas de Luz - Versión Sin Indexados")
 
 def obtener_datos():
     url = "https://www.simuladorfacturaluz.es/sfl_api/?func=get_html_tarifas_luz"
@@ -31,6 +31,10 @@ if st.button('Generar Tabla Completa'):
             compania = str(fila.iloc[2])
             detalles = str(fila.iloc[3])
             
+            # FILTRO: Si "Indexado" está en el nombre de la compañía, saltamos esta fila
+            if "indexado" in compania.lower():
+                continue
+            
             if compania != 'nan' and 'Potencia' in detalles:
                 # Extracción
                 p1 = limpiar_y_extraer(detalles, "P1")
@@ -43,7 +47,6 @@ if st.button('Generar Tabla Completa'):
                 match_fv = re.search(r"FV\.EXC:\s*([\d]+[\.,][\d]+)\s*€/kWh", detalles, re.IGNORECASE)
                 fv = float(match_fv.group(1).replace(',', '.')) if match_fv else 0.0
                 
-                # Mapeo a las nuevas columnas solicitadas
                 datos_finales.append({
                     "Compañía suministradora": compania,
                     "Potencia: Periodo Punta": p1,
@@ -56,14 +59,10 @@ if st.button('Generar Tabla Completa'):
 
         df_final = pd.DataFrame(datos_finales)
         
-        # Eliminamos la fila 0 si es necesario (según tu lógica previa)
+        # Eliminar fila 0 si existe
         if not df_final.empty:
             df_final = df_final.iloc[1:]
         
-        # Mostramos la tabla. 
-        # NOTA: st.dataframe no permite crear filas de cabecera extra (celdas combinadas),
-        # pero al usar nombres como "Potencia: X" y "Energía: Y", 
-        # obtienes el mismo resultado visual de agrupación.
         st.dataframe(df_final, use_container_width=True)
         
         csv = df_final.to_csv(index=False).encode('utf-8')
