@@ -1,52 +1,54 @@
 import streamlit as st
 import pandas as pd
 import requests
+import io
 
-st.set_page_config(page_title="Extractor Tarifas", layout="wide")
-st.title("📊 Extractor de Tarifas (Datos Seleccionados)")
+# Configuración de la interfaz
+st.set_page_config(page_title="Tarifas Luz", layout="wide")
+st.title("📊 Extractor de Tarifas de Luz")
 
-def obtener_datos_limpios():
-    # Usamos la misma URL que descubriste
+def obtener_datos_api():
+    # URL de la API identificada en el cURL
     url = "https://www.simuladorfacturaluz.es/sfl_api/?func=get_html_tarifas_luz"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Referer": "https://www.simuladorfacturaluz.es/tarifas-de-luz/"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        "Referer": "https://www.simuladorfacturaluz.es/tarifas-de-luz/",
+        "Accept": "*/*"
     }
     
-    response = requests.get(url, headers=headers)
-    
-    # Esta API devuelve una estructura que podemos convertir a JSON
-    # Si la API devuelve un JSON directamente, usamos response.json()
-    # Si la API devuelve una respuesta estructurada, la procesamos:
     try:
-        # Intentamos obtener el JSON que la web usa internamente
-        data = response.json() 
-    except:
-        return None, "La API no devolvió datos en formato JSON."
+        response = requests.get(url, headers=headers, timeout=15)
+        if response.status_code == 200:
+            # Convertimos el texto HTML en un stream para que pandas lo lea correctamente
+            html_io = io.StringIO(response.text)
+            # read_html devuelve una lista de DataFrames encontrados en el HTML
+            tablas = pd.read_html(html_io)
+            
+            if tablas:
+                return tablas[0], None
+            else:
+                return None, "No se encontraron tablas en la respuesta."
+        else:
+            return None, f"Error HTTP {response.status_code}"
+    except Exception as e:
+        return None, str(e)
 
-    datos_finales = []
-    
-    # Mapeo manual de los campos que solicitaste
-    for item in data:
-        datos_finales.append({
-            'Compañía': item.get('cia', 'N/A'),
-            'Tarifa': item.get('nom', 'N/A'),
-            'P1': item.get('p1', 0),
-            'P2': item.get('p2', 0),
-            'P3': item.get('p3', 0),
-            'E1': item.get('e1', 0),
-            'E2': item.get('e2', 0),
-            'E3': item.get('e3', 0),
-            'FV': item.get('fvexc', 0)
-        })
+# Interfaz principal
+if st.button('Obtener Tarifas Actualizadas'):
+    with st.spinner('Consultando la API de tarifas...'):
+        df, error = obtener_datos_api()
         
-    return pd.DataFrame(datos_finales), None
-
-if st.button('Obtener Mis Datos'):
-    df, error = obtener_datos_limpios()
-    if error:
-        st.error(error)
-    else:
-        st.dataframe(df, use_container_width=True)
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("Descargar CSV", csv, "tarifas_seleccionadas.csv", "text/csv")
+        if error:
+            st.error(f"Error: {error}")
+        else:
+            st.success("¡Datos cargados correctamente!")
+            st.dataframe(df, use_container_width=True)
+            
+            # Preparar descarga de CSV
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="Descargar datos como CSV",
+                data=csv,
+                file_name='tarifas_luz.csv',
+                mime='text/csv'
+            )
