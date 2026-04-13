@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
 import json
-from playwright.sync_api 
-import sync_playwright
+from playwright.sync_api import sync_playwright
 
 # Configuración de la página
 st.set_page_config(page_title="Scraper Tarifas", layout="wide")
