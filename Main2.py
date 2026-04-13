@@ -5,9 +5,9 @@ import io
 import re
 
 st.set_page_config(page_title="Extractor Tarifas", layout="wide")
-st.title("📊 Extractor de Tarifas de Luz - Base de Datos Completa")
+st.title("📊 Extractor de Tarifas de Luz - Filtro Estricto")
 
-# La lista extraída de tu Excel
+# Base de datos extraída de tu Excel
 DB_NOMBRES = [
     "Iberdrola Plan Online", "Iberdrola Plan Online 3 periodos", "Iberdrola Plan Más Ahorro",
     "Iberdrola Plan Estable", "Iberdrola Plan Verano", "Iberdrola Plan Solar",
@@ -36,7 +36,6 @@ def limpiar_y_extraer(texto, patron):
 
 def normalizar_con_db(nombre_web):
     nombre_web = " ".join(str(nombre_web).split())
-    # Tomamos las 3 primeras palabras para comparar
     palabras_web = nombre_web.lower().split()[:3]
     inicio_web = " ".join(palabras_web)
 
@@ -46,7 +45,6 @@ def normalizar_con_db(nombre_web):
         if inicio_web == inicio_db:
             return nombre_limpio
             
-    # Si no está en la DB, quitamos fechas y devolvemos original limpio
     return re.split(r'\d{2}\s\w{3}\s\d{4}', nombre_web)[0].strip()
 
 if st.button('Generar Tabla Completa'):
@@ -57,13 +55,16 @@ if st.button('Generar Tabla Completa'):
         for _, fila in df.iterrows():
             if len(fila) < 4: continue
             
+            # 1. Obtener nombre y limpiar
             compania = normalizar_con_db(fila.iloc[2])
             detalles = str(fila.iloc[3])
             
-            # FILTROS ACTIVOS: Indexado, 3.0TD y BV
-            # Convertimos a minúsculas para que el filtro sea robusto
-            nombre_check = compania.lower()
-            if "indexado" in nombre_check or "3.0td" in nombre_check or "bv" in nombre_check:
+            # 2. FILTRO ESTRICTO: Si contiene "indexado", "3.0td" o "bv", se salta la fila
+            # Se comprueba tanto en el nombre normalizado como en el original de la web
+            nombre_raw = str(fila.iloc[2]).lower()
+            nombre_norm = compania.lower()
+            
+            if any(term in nombre_raw or term in nombre_norm for term in ["indexado", "3.0td", "bv"]):
                 continue
             
             if compania != 'nan' and 'Potencia' in detalles:
@@ -76,22 +77,36 @@ if st.button('Generar Tabla Completa'):
                 match_fv = re.search(r"FV\.EXC:\s*([\d]+[\.,][\d]+)\s*€/kWh", detalles, re.IGNORECASE)
                 fv = float(match_fv.group(1).replace(',', '.')) if match_fv else 0.0
                 
+                # Columnas alineadas con tu Excel
                 datos_finales.append({
                     "Compañía suministradora": compania,
-                    "Potencia: Periodo Punta": p1,
-                    "Potencia: Periodo Valle": p2,
-                    "Energía: Periodo Punta": e1,
-                    "Energía: Periodo Llano": e2,
-                    "Energía: Periodo Valle": e3,
+                    "Potencia Periodo Punta": p1,
+                    "Potencia Periodo Valle": p2,
+                    "Energía Periodo Punta": e1,
+                    "Energía Periodo Llano": e2,
+                    "Energía Periodo Valle": e3,
                     "Precio Excedentes (€/kWh)": fv
                 })
 
         df_final = pd.DataFrame(datos_finales)
+        
         if not df_final.empty:
-            df_final = df_final.iloc[1:].reset_index(drop=True)
+            # Quitamos la primera fila si es basura y reseteamos el índice
+            df_final = df_final.reset_index(drop=True)
+            
             st.dataframe(df_final, use_container_width=True)
-            csv = df_final.to_csv(index=False).encode('utf-8')
-            st.download_button("Descargar CSV Final", csv, "tarifas_limpias.csv", "text/csv")
+            
+            # Exportación a Excel para mantener formato
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df_final.to_excel(writer, index=False, sheet_name='Tarifas Actualizadas')
+            
+            st.download_button(
+                label="📥 Descargar Excel Final",
+                data=output.getvalue(),
+                file_name="tarifas_limpias.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
             
     except Exception as e:
-        st.error(f"Error técnico: {e}")
+        st.error(f"Error en el proceso: {e}")
