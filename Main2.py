@@ -4,7 +4,6 @@ import requests
 import io
 import re
 
-# Configuración de página
 st.set_page_config(page_title="Extractor Tarifas Maestro", layout="wide")
 st.title("📊 Extractor de Tarifas de Luz - Formato Profesional")
 
@@ -29,76 +28,61 @@ def obtener_datos():
         response = requests.get(url, headers=headers, timeout=20)
         tablas = pd.read_html(io.StringIO(response.text))
         return tablas[0] if tablas else pd.DataFrame()
-    except Exception as e:
-        st.error(f"Error al conectar con la web: {e}")
+    except:
         return pd.DataFrame()
 
 def extraer_numero_seguro(texto, patron):
-    """Extrae el número del patrón. Si no existe o falla, devuelve 0.0 sin romper el código."""
-    if not texto or pd.isna(texto):
-        return 0.0
+    """Extrae números de forma segura. Si falla o no existe, devuelve 0.0"""
     try:
-        # Busca el patrón y captura el número (soporta 0,123 y 0.123)
-        regex = f"{patron}.*?[:\s]+([\d]+[\.,][\d]+)"
-        match = re.search(regex, str(texto), re.IGNORECASE)
+        if not texto or pd.isna(texto): return 0.0
+        # Regex flexible: busca el patrón y el siguiente número con coma o punto
+        match = re.search(f"{patron}.*?(\d+[\.,]\d+)", str(texto), re.IGNORECASE)
         if match:
             return float(match.group(1).replace(',', '.'))
     except:
         pass
     return 0.0
 
-def normalizar_con_db(nombre_web):
-    nombre_web = " ".join(str(nombre_web).split())
-    palabras_web = nombre_web.lower().split()[:3]
-    inicio_web = " ".join(palabras_web)
-    for nombre_limpio in DB_NOMBRES:
-        palabras_db = nombre_limpio.lower().split()[:3]
-        if inicio_web == " ".join(palabras_db):
-            return nombre_limpio
-    return re.split(r'\d{2}\s\w{3}\s\d{4}', nombre_web)[0].strip()
+def normalizar_nombre(nombre_raw):
+    nombre_limpio = " ".join(str(nombre_raw).split()).strip()
+    nombre_limpio = re.split(r'\d{2}\s\w{3}\s\d{4}', nombre_limpio)[0].strip()
+    for db_n in DB_NOMBRES:
+        if db_n.lower() in nombre_limpio.lower() or nombre_limpio.lower() in db_n.lower():
+            return db_n
+    return nombre_limpio
 
-if st.button('🚀 Generar Tabla de Tarifas'):
+if st.button('🚀 Generar Tabla y Archivos'):
     df_web = obtener_datos()
     
     if not df_web.empty:
         datos_procesados = []
         
         for _, fila in df_web.iterrows():
-            # Saltamos filas que no tengan el mínimo de columnas
             if len(fila) < 4: continue
             
-            val_compania = fila.iloc[2]
-            val_detalles = fila.iloc[3]
+            compania_raw = fila.iloc[2]
+            detalles = str(fila.iloc[3])
             
-            # Saltamos si son nulos o no es una tarifa real (debe contener 'Potencia')
-            if pd.isna(val_compania) or pd.isna(val_detalles) or 'potencia' not in str(val_detalles).lower():
-                continue
+            # Filtro: Solo filas que parezcan tarifas reales
+            if "potencia" not in detalles.lower(): continue
 
-            compania = normalizar_con_db(val_compania)
-            detalles = str(val_detalles)
+            nombre_final = normalizar_nombre(compania_raw)
             
-            # Filtros de exclusión
-            excluir = ["indexado", "3.0td", "bv", "estabanell", "bonpreu", "electra", "som", "pvpc", "suministradora"]
-            if any(term in compania.lower() for term in excluir):
-                continue
+            # Filtros de exclusión solicitados
+            excluir = ["indexado", "3.0td", "bv", "estabanell", "bonpreu", "electra", "som", "pvpc"]
+            if any(x in nombre_final.lower() for x in excluir): continue
             
-            # EXTRACCIÓN BLINDADA
+            # Extracción de valores con backups (si P2 no existe usa P1, etc.)
             p1 = extraer_numero_seguro(detalles, "P1")
-            p2 = extraer_numero_seguro(detalles, "P2")
-            if p2 == 0.0: p2 = p1 # Caso tarifas de 1 solo periodo
-            
+            p2 = extraer_numero_seguro(detalles, "P2") or p1
             e1 = extraer_numero_seguro(detalles, "E1")
-            e2 = extraer_numero_seguro(detalles, "E2")
-            if e2 == 0.0: e2 = e1
-            
-            e3 = extraer_numero_seguro(detalles, "E3")
-            if e3 == 0.0: e3 = e2
-            
+            e2 = extraer_numero_seguro(detalles, "E2") or e1
+            e3 = extraer_numero_seguro(detalles, "E3") or e2
             fv = extraer_numero_seguro(detalles, "FV.EXC")
             
-            datos_procesados.append([compania, p1, p2, e1, e2, e3, fv])
+            datos_procesados.append([nombre_final, p1, p2, e1, e2, e3, fv])
 
-        # DEFINICIÓN DE CABECERAS (Idéntico a tu Excel original)
+        # --- CREACIÓN DE LA ESTRUCTURA MULTI-INDEX (Idéntica a tu imagen) ---
         columnas = pd.MultiIndex.from_tuples([
             ("", "Compañía suministradora"),
             ("Coste término de Potencia en €/kWdia", "Periodo Punta"),
@@ -113,25 +97,33 @@ if st.button('🚀 Generar Tabla de Tarifas'):
         df_final = df_final.drop_duplicates().reset_index(drop=True)
 
         if not df_final.empty:
-            st.subheader("📋 Tarifas Extraídas")
+            st.success(f"¡Se han extraído {len(df_final)} tarifas!")
             st.dataframe(df_final, use_container_width=True)
             
-            # BOTÓN DE DESCARGA EXCEL PROFESIONAL
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df_final.to_excel(writer, index=False, sheet_name='Tarifas')
-                # Formateo automático de columnas
-                worksheet = writer.sheets['Tarifas']
-                for i, col in enumerate(df_final.columns):
-                    worksheet.set_column(i, i, 20)
+            col1, col2 = st.columns(2)
             
-            st.download_button(
-                label="📥 Descargar Excel (.xlsx)",
-                data=output.getvalue(),
-                file_name="tarifas_luz_maestro.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            with col1:
+                # EXPORTAR EXCEL (CON CELDAS COMBINADAS)
+                output_excel = io.BytesIO()
+                with pd.ExcelWriter(output_excel, engine='xlsxwriter') as writer:
+                    df_final.to_excel(writer, index=False, sheet_name='Tarifas')
+                    workbook = writer.book
+                    worksheet = writer.sheets['Tarifas']
+                    # Formato estético
+                    header_format = workbook.add_format({'bold': True, 'border': 1, 'align': 'center', 'valign': 'vcenter'})
+                    worksheet.set_column(0, 0, 35)
+                    worksheet.set_column(1, 6, 15)
+                
+                st.download_button("📥 Descargar Excel (.xlsx)", output_excel.getvalue(), "tarifas_luz.xlsx")
+
+            with col2:
+                # EXPORTAR DOCUMENTO DE TEXTO (Para imprimir)
+                buffer_txt = io.StringIO()
+                buffer_txt.write("LISTADO DE TARIFAS ELÉCTRICAS\n" + "="*40 + "\n\n")
+                buffer_txt.write(df_final.to_string(index=False))
+                
+                st.download_button("📄 Descargar Documento de Texto (.txt)", buffer_txt.getvalue(), "tarifas_luz.txt")
         else:
             st.warning("No se encontraron tarifas válidas.")
     else:
-        st.error("No se pudo obtener la tabla de la web.")
+        st.error("No se pudo conectar con la fuente de datos.")
