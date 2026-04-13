@@ -82,7 +82,13 @@ if st.button('Generar Tabla Completa'):
                 e3 = limpiar_y_extraer(detalles, "E3") or e2
                 
                 match_fv = re.search(r"FV\.EXC:\s*([\d]+[\.,][\d]+)\s*€/kWh", detalles, re.IGNORECASE)
-                fv = float(match_fv.group(1).replace(',', '.')) if match_fv else 0.0
+
+                if match_fv:
+                    # Si encuentra el valor, lo limpia y convierte
+                    fv = float(match_fv.group(1).replace(',', '.'))
+                else:
+                    # Si no encuentra el patrón (ej. tarifa sin excedentes), asigna 0.0
+                    fv = 0.0
                 
                 datos_finales.append([compania, p1, p2, e1, e2, e3, fv])
 
