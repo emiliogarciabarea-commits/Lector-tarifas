@@ -5,7 +5,7 @@ import io
 import re
 
 st.set_page_config(page_title="Extractor Tarifas", layout="wide")
-st.title("📊 Extractor de Tarifas de Luz - Versión Sin Indexados")
+st.title("📊 Extractor de Tarifas de Luz - Versión Final")
 
 def obtener_datos():
     url = "https://www.simuladorfacturaluz.es/sfl_api/?func=get_html_tarifas_luz"
@@ -20,6 +20,15 @@ def limpiar_y_extraer(texto, patron):
         return float(match.group(1).replace(',', '.'))
     return None
 
+def normalizar_nombre(nombre):
+    # 1. Eliminar espacios en blanco extra al principio y al final
+    # 2. Reemplazar saltos de línea o múltiples espacios por uno solo
+    nombre_limpio = " ".join(str(nombre).split())
+    # 3. (Opcional) Si en tu Excel solo quieres "Iberdrola Plan Online" 
+    # y la web trae fechas, puedes usar regex para cortar antes de la fecha.
+    nombre_limpio = re.split(r'\d{2}\s\w{3}\s\d{4}', nombre_limpio)[0].strip()
+    return nombre_limpio
+
 if st.button('Generar Tabla Completa'):
     try:
         df = obtener_datos()
@@ -28,22 +37,24 @@ if st.button('Generar Tabla Completa'):
         for _, fila in df.iterrows():
             if len(fila) < 4: continue
             
-            compania = str(fila.iloc[2])
+            # Aplicamos la normalización al nombre de la compañía
+            compania_raw = str(fila.iloc[2])
+            compania = normalizar_nombre(compania_raw)
+            
             detalles = str(fila.iloc[3])
             
-            # FILTRO: Si "Indexado" está en el nombre de la compañía, saltamos esta fila
+            # FILTRO: Si "Indexado" está en el nombre, saltamos
             if "indexado" in compania.lower():
                 continue
             
             if compania != 'nan' and 'Potencia' in detalles:
-                # Extracción
                 p1 = limpiar_y_extraer(detalles, "P1")
                 p2 = limpiar_y_extraer(detalles, "P2") or p1
                 e1 = limpiar_y_extraer(detalles, "E1")
                 e2 = limpiar_y_extraer(detalles, "E2") or e1
                 e3 = limpiar_y_extraer(detalles, "E3") or e2
                 
-                # Lógica FV
+                # Lógica FV exacta
                 match_fv = re.search(r"FV\.EXC:\s*([\d]+[\.,][\d]+)\s*€/kWh", detalles, re.IGNORECASE)
                 fv = float(match_fv.group(1).replace(',', '.')) if match_fv else 0.0
                 
@@ -59,9 +70,8 @@ if st.button('Generar Tabla Completa'):
 
         df_final = pd.DataFrame(datos_finales)
         
-        # Eliminar fila 0 si existe
         if not df_final.empty:
-            df_final = df_final.iloc[1:]
+            df_final = df_final.iloc[1:] # Eliminar fila 0 (Generalmente encabezados basura)
         
         st.dataframe(df_final, use_container_width=True)
         
