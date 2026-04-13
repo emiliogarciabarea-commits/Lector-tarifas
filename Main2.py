@@ -64,6 +64,7 @@ if st.button('🚀 Generar Tabla y Archivos'):
             excluir = ["indexado", "3.0td", "bv", "estabanell", "bonpreu", "electra", "som", "pvpc", "(indexado)", "PVPC"]
             if any(palabra in detalles.lower() for palabra in excluir_palabras):
                 continue
+            nombre_final = normalizar_nombre(compania_raw)
             
             p1 = extraer_numero_seguro(detalles, "P1")
             p2 = extraer_numero_seguro(detalles, "P2") or p1
