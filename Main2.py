@@ -58,19 +58,21 @@ if st.button('Generar Tabla Completa'):
             compania = normalizar_con_db(fila.iloc[2])
             detalles = str(fila.iloc[3])
             
-            # --- SECCIÓN DE FILTROS ---
+            # --- SECCIÓN DE FILTROS ACTUALIZADA ---
             nombre_check = compania.lower()
             excluir = [
                 "indexado", 
                 "3.0td", 
                 "bv", 
                 "estabanell", 
-                "bonpreu"
+                "bonpreu",
+                "electra",
+                "som energia"
             ]
             
             if any(termino in nombre_check for termino in excluir):
                 continue
-            # ---------------------------
+            # ---------------------------------------
             
             if compania != 'nan' and 'Potencia' in detalles:
                 p1 = limpiar_y_extraer(detalles, "P1")
