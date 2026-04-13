@@ -5,9 +5,9 @@ import io
 import re
 
 st.set_page_config(page_title="Extractor Tarifas Profesional", layout="wide")
-st.title("📊 Extractor de Tarifas de Luz - Formato Original")
+st.title("📊 Extractor de Tarifas de Luz - Formato Maestro")
 
-# Base de datos extraída de tu Excel
+# Base de datos para normalización
 DB_NOMBRES = [
     "Iberdrola Plan Online", "Iberdrola Plan Online 3 periodos", "Iberdrola Plan Más Ahorro",
     "Iberdrola Plan Estable", "Iberdrola Plan Verano", "Iberdrola Plan Solar",
@@ -50,7 +50,7 @@ def to_xml(df):
     for _, row in df.iterrows():
         xml.append('  <Tarifa>')
         for col in df.columns:
-            # Usamos el segundo nivel del MultiIndex para el nombre de la etiqueta XML
+            # Usamos el segundo nivel del MultiIndex para las etiquetas XML
             tag = str(col[1]).replace(" ", "_").replace("á", "a").replace("ñ", "n").replace("í", "i").replace("(", "").replace(")", "").replace("/", "")
             xml.append(f'    <{tag}>{row[col]}</{tag}>')
         xml.append('  </Tarifa>')
@@ -68,7 +68,7 @@ if st.button('Generar Tabla Completa'):
             compania = normalizar_con_db(fila.iloc[2])
             detalles = str(fila.iloc[3])
             
-            # --- FILTROS ---
+            # --- FILTROS DE EXCLUSIÓN ---
             nombre_check = compania.lower()
             excluir = ["indexado", "3.0td", "bv", "estabanell", "bonpreu", "electra", "som", "pvpc"]
             if any(termino in nombre_check for termino in excluir):
@@ -86,7 +86,7 @@ if st.button('Generar Tabla Completa'):
                 
                 datos_finales.append([compania, p1, p2, e1, e2, e3, fv])
 
-        # --- ESTRUCTURA DE MULTIINDEX (La que ves en la App) ---
+        # --- ESTRUCTURA DE COLUMNAS IDÉNTICA AL ADJUNTO ---
         columnas = pd.MultiIndex.from_tuples([
             ("", "Compañía suministradora"),
             ("Coste término de Potencia en €/kWdia", "Periodo Punta"),
@@ -102,27 +102,39 @@ if st.button('Generar Tabla Completa'):
         if not df_final.empty:
             df_final = df_final.reset_index(drop=True)
             
-            # Mostrar tabla en la App
-            st.subheader("Vista previa de la tabla")
+            st.subheader("Vista previa de la tabla (Formato Limpio)")
             st.dataframe(df_final, use_container_width=True)
             
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                # --- DESCARGA EXCEL IDÉNTICA A LA VISTA ---
+                # --- EXPORTACIÓN EXCEL PROFESIONAL (.XLSX) ---
                 output = io.BytesIO()
-                # Usamos xlsxwriter para asegurar que el formato MultiIndex se mantenga limpio
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    # Al usar MultiIndex, Pandas y xlsxwriter combinan las celdas superiores automáticamente
                     df_final.to_excel(writer, index=False, sheet_name='Tarifas')
-                    # Opcional: Ajuste automático de columnas para que se vea bien al abrir
+                    
+                    workbook  = writer.book
                     worksheet = writer.sheets['Tarifas']
-                    for i, col in enumerate(df_final.columns):
-                        worksheet.set_column(i, i, 20)
+                    
+                    # Formato estético para las cabeceras
+                    header_format = workbook.add_format({
+                        'bold': True,
+                        'text_wrap': True,
+                        'valign': 'vcenter',
+                        'align': 'center',
+                        'border': 1
+                    })
+                    
+                    # Ajuste de ancho de columnas para que se vea igual que el archivo original
+                    worksheet.set_column(0, 0, 35) # Compañía
+                    worksheet.set_column(1, 5, 18) # Periodos
+                    worksheet.set_column(6, 6, 25) # Excedentes
                 
                 st.download_button(
                     label="📥 Descargar Excel (.xlsx)",
                     data=output.getvalue(),
-                    file_name="tarifas_luz.xlsx",
+                    file_name="tarifas_actualizadas.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
