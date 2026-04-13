@@ -14,9 +14,10 @@ def obtener_datos():
     return pd.read_html(io.StringIO(response.text))[0]
 
 def limpiar_y_extraer(texto, patron):
-    # Ajuste: Buscamos el patrón, seguido de ":", un espacio opcional, y luego el número
-    # Esto evita que capture números que estén pegados al nombre del campo (como el '1' de 'FV1')
-    regex = f"{patron}.*?:\s*([\d]+(?:[\.,][\d]+)?)"
+    # Esta versión busca el patrón, ignora hasta los dos puntos, 
+    # y EXIGE que el número tenga al menos un decimal (punto o coma)
+    # Esto evita capturar el '1' de 'FV1' o números enteros de tarifas
+    regex = f"{patron}.*?:\s*([\d]+[\.,][\d]+)"
     
     match = re.search(regex, texto, re.IGNORECASE)
     if match:
