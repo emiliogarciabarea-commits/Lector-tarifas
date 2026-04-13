@@ -3,3 +3,5 @@ requests
 pandas
 openpyxl
 lxml
+html5lib
+xlsxwriter
