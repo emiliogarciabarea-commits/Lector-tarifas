@@ -7,7 +7,18 @@ st.title("📊 Extractor de Tarifas (Datos Seleccionados)")
 
 def obtener_datos_limpios():
     # Usamos la misma URL que descubriste
-    url = "https://www.simuladorfacturaluz.es/sfl_api/?func=get_html_tarifas_luz"
+    url = "curl ^"https://www.simuladorfacturaluz.es/sfl_api/?func=get_html_tarifas_luz^" ^
+  -H ^"accept: */*^" ^
+  -H ^"accept-language: de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7^" ^
+  -H ^"priority: u=1, i^" ^
+  -H ^"referer: https://www.simuladorfacturaluz.es/tarifas-de-luz/^" ^
+  -H ^"sec-ch-ua: ^\^"Google Chrome^\^";v=^\^"147^\^", ^\^"Not.A/Brand^\^";v=^\^"8^\^", ^\^"Chromium^\^";v=^\^"147^\^"^" ^
+  -H ^"sec-ch-ua-mobile: ?0^" ^
+  -H ^"sec-ch-ua-platform: ^\^"Windows^\^"^" ^
+  -H ^"sec-fetch-dest: empty^" ^
+  -H ^"sec-fetch-mode: cors^" ^
+  -H ^"sec-fetch-site: same-origin^" ^
+  -H ^"user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36^""
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Referer": "https://www.simuladorfacturaluz.es/tarifas-de-luz/"
