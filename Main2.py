@@ -7,7 +7,6 @@ import re
 st.set_page_config(page_title="Extractor Tarifas Maestro", layout="wide")
 st.title("📊 Extractor de Tarifas de Luz - Formato Profesional")
 
-# Base de datos para normalización
 DB_NOMBRES = [
     "Iberdrola Plan Online", "Iberdrola Plan Online 3 periodos", "Iberdrola Plan Más Ahorro",
     "Iberdrola Plan Estable", "Iberdrola Plan Verano", "Iberdrola Plan Solar",
@@ -32,7 +31,6 @@ def obtener_datos():
         return pd.DataFrame()
 
 def extraer_numero_seguro(texto, patron):
-    """Extrae números de forma segura. Si falla o no existe, devuelve 0.0"""
     try:
         if not texto or pd.isna(texto): return 0.0
         match = re.search(f"{patron}.*?(\d+[\.,]\d+)", str(texto), re.IGNORECASE)
@@ -55,22 +53,17 @@ if st.button('🚀 Generar Tabla y Archivos'):
     
     if not df_web.empty:
         datos_procesados = []
-        
         for _, fila in df_web.iterrows():
             if len(fila) < 4: continue
-            
             compania_raw = fila.iloc[2]
             detalles = str(fila.iloc[3])
             
             if "potencia" not in detalles.lower(): continue
 
             nombre_final = normalizar_nombre(compania_raw)
-            
-            # Filtros de exclusión
             excluir = ["indexado", "3.0td", "bv", "estabanell", "bonpreu", "electra", "som", "pvpc"]
             if any(x in nombre_final.lower() for x in excluir): continue
             
-            # Extracción de valores
             p1 = extraer_numero_seguro(detalles, "P1")
             p2 = extraer_numero_seguro(detalles, "P2") or p1
             e1 = extraer_numero_seguro(detalles, "E1")
@@ -80,7 +73,6 @@ if st.button('🚀 Generar Tabla y Archivos'):
             
             datos_procesados.append([nombre_final, p1, p2, e1, e2, e3, fv])
 
-        # Estructura MultiIndex para Excel (Idéntica a tu imagen)
         columnas = pd.MultiIndex.from_tuples([
             ("", "Compañía suministradora"),
             ("Coste término de Potencia en €/kWdia", "Periodo Punta"),
@@ -101,23 +93,20 @@ if st.button('🚀 Generar Tabla y Archivos'):
             col1, col2 = st.columns(2)
             
             with col1:
-                # EXPORTAR EXCEL PROFESIONAL
                 output_excel = io.BytesIO()
+                # Aplanamos columnas para que Excel no falle
+                df_excel = df_final.copy()
+                df_excel.columns = [f"{c[0]} {c[1]}".strip() for c in df_excel.columns]
+                
                 with pd.ExcelWriter(output_excel, engine='xlsxwriter') as writer:
-                    df_final.to_excel(writer, index=False, sheet_name='Tarifas')
-                    workbook = writer.book
-                    worksheet = writer.sheets['Tarifas']
-                    worksheet.set_column(0, 0, 35)
-                    worksheet.set_column(1, 6, 15)
+                    df_excel.to_excel(writer, index=False, sheet_name='Tarifas')
                 
                 st.download_button("📥 Descargar Excel (.xlsx)", output_excel.getvalue(), "tarifas_luz.xlsx")
 
             with col2:
-                # EXPORTAR DOCUMENTO DE TEXTO
                 buffer_txt = io.StringIO()
                 buffer_txt.write("LISTADO DE TARIFAS ELÉCTRICAS\n" + "="*40 + "\n\n")
                 buffer_txt.write(df_final.to_string(index=False))
-                
                 st.download_button("📄 Descargar Documento de Texto (.txt)", buffer_txt.getvalue(), "tarifas_luz.txt")
         else:
             st.warning("No se encontraron tarifas válidas.")
