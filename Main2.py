@@ -14,12 +14,14 @@ def obtener_datos():
     return pd.read_html(io.StringIO(response.text))[0]
 
 def limpiar_y_extraer(texto, patron):
-    # Primero limpiamos el texto: quitamos '€', '/kWh', espacios raros
-    texto_limpio = texto.replace('€', '').replace('/kWh', '').replace('≈', '')
-    # Buscamos el patrón seguido de cualquier cosa y luego el número
-    match = re.search(f"{patron}.*?([\d]+(?:[\.,][\d]+)?)", texto_limpio, re.IGNORECASE)
+    # Ajuste: Buscamos el patrón, seguido de ":", un espacio opcional, y luego el número
+    # Esto evita que capture números que estén pegados al nombre del campo (como el '1' de 'FV1')
+    regex = f"{patron}.*?:\s*([\d]+(?:[\.,][\d]+)?)"
+    
+    match = re.search(regex, texto, re.IGNORECASE)
     if match:
-        return float(match.group(1).replace(',', '.'))
+        valor = match.group(1).replace(',', '.')
+        return float(valor)
     return None
 
 if st.button('Generar Tabla Completa'):
