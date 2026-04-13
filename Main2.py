@@ -60,14 +60,9 @@ if st.button('🚀 Generar Tabla y Archivos'):
             
             if "potencia" not in detalles.lower(): continue
 
-                            
-            # 3. Resto de filtros de exclusión (Bonpreu, etc.)
-            excluir = ["indexado", "3.0td", "bv", "estabanell", "bonpreu", "electra", "som"]
-            texto_a_verificar = (str(compania_raw) + " " + detalles).lower()
-            if any(palabra in texto_a_verificar for palabra in excluir):
-                continue
-            
             nombre_final = normalizar_nombre(compania_raw)
+            excluir = ["indexado", "3.0td", "bv", "estabanell", "bonpreu", "electra", "som", "pvpc"]
+            if any(x in nombre_final.lower() for x in excluir): continue
             
             p1 = extraer_numero_seguro(detalles, "P1")
             p2 = extraer_numero_seguro(detalles, "P2") or p1
