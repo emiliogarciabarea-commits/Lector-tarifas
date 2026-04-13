@@ -8,8 +8,9 @@ st.set_page_config(page_title="Tarifas Luz", layout="wide")
 st.title("📊 Extractor de Tarifas de Luz - Formateado")
 
 def extraer_precio(texto, patron):
-    # Busca el patrón (ej: "P1: 0,12") y extrae el número
-    match = re.search(f"{patron}:\s*([\d,]+)", texto)
+    # 're.IGNORECASE' permite capturar "fv:", "Fv:", "FV:", etc.
+    # El patrón busca el nombre del campo, seguido de opcionalmente otros caracteres y el número
+    match = re.search(f"{patron}:\s*([\d,]+)", texto, re.IGNORECASE)
     if match:
         return float(match.group(1).replace(',', '.'))
     return None
@@ -30,15 +31,18 @@ if st.button('Generar Tabla Formateada'):
         detalles = str(fila.iloc[3])
         
         if tarifa != 'None' and 'Potencia' in detalles:
-            # Extraer valores básicos
+            # Extraer valores básicos usando la función mejorada
             p1 = extraer_precio(detalles, "P1")
-            p2 = extraer_precio(detalles, "P2") or p1 # Si no hay P2, es P1
+            p2 = extraer_precio(detalles, "P2") or p1 
             p3 = extraer_precio(detalles, "P3") or p2
             
             e1 = extraer_precio(detalles, "E1")
             e2 = extraer_precio(detalles, "E2") or e1
             e3 = extraer_precio(detalles, "E3") or e2
-            fv = extraer_precio(detalles, "Fv") or 0.0
+            
+            # Lógica para FV: si no existe, asignamos 0.0 explícitamente
+            fv_raw = extraer_precio(detalles, "FV")
+            fv = fv_raw if fv_raw is not None else 0.0
             
             datos_finales.append({
                 "Tarifa": tarifa,
@@ -48,4 +52,10 @@ if st.button('Generar Tabla Formateada'):
             })
             
     df_final = pd.DataFrame(datos_finales)
+    
+    # Mostrar la tabla final
     st.dataframe(df_final, use_container_width=True)
+    
+    # Opcional: botón de descarga
+    csv = df_final.to_csv(index=False).encode('utf-8')
+    st.download_button("Descargar CSV Formateado", csv, "tarifas_formateadas.csv", "text/csv")
