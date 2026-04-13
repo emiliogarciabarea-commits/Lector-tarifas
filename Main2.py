@@ -14,7 +14,6 @@ def obtener_datos():
     return pd.read_html(io.StringIO(response.text))[0]
 
 def limpiar_y_extraer(texto, patron):
-    # Regex ajustada para buscar el patrón y capturar el número decimal
     regex = f"{patron}.*?[:\s]+([\d]+[\.,][\d]+)"
     match = re.search(regex, texto, re.IGNORECASE)
     if match:
@@ -33,11 +32,9 @@ if st.button('Generar Tabla Completa'):
             detalles = str(fila.iloc[3])
             
             if compania != 'nan' and 'Potencia' in detalles:
-                # Extracción de datos
+                # Extracción
                 p1 = limpiar_y_extraer(detalles, "P1")
                 p2 = limpiar_y_extraer(detalles, "P2") or p1
-                p3 = limpiar_y_extraer(detalles, "P3") or p2
-                
                 e1 = limpiar_y_extraer(detalles, "E1")
                 e2 = limpiar_y_extraer(detalles, "E2") or e1
                 e3 = limpiar_y_extraer(detalles, "E3") or e2
@@ -46,24 +43,27 @@ if st.button('Generar Tabla Completa'):
                 match_fv = re.search(r"FV\.EXC:\s*([\d]+[\.,][\d]+)\s*€/kWh", detalles, re.IGNORECASE)
                 fv = float(match_fv.group(1).replace(',', '.')) if match_fv else 0.0
                 
-                # Diccionario con los nuevos nombres solicitados
-                # Nota: Si los nombres se repiten, pandas añadirá .1, .2 para diferenciarlos
+                # Mapeo a las nuevas columnas solicitadas
                 datos_finales.append({
                     "Compañía suministradora": compania,
-                    "Periodo Punta (Potencia)": p1,
-                    "Periodo Valle (Potencia)": p2,
-                    "Periodo Punta (Energía)": e1,
-                    "Periodo Llano (Energía)": e2,
-                    "Periodo Valle (Energía)": e3,
-                    "FV": fv
+                    "Potencia: Periodo Punta": p1,
+                    "Potencia: Periodo Valle": p2,
+                    "Energía: Periodo Punta": e1,
+                    "Energía: Periodo Llano": e2,
+                    "Energía: Periodo Valle": e3,
+                    "Precio Excedentes (€/kWh)": fv
                 })
 
         df_final = pd.DataFrame(datos_finales)
         
-        # Limpiezas finales
+        # Eliminamos la fila 0 si es necesario (según tu lógica previa)
         if not df_final.empty:
-            df_final = df_final.iloc[1:] # Eliminar fila 0
-            
+            df_final = df_final.iloc[1:]
+        
+        # Mostramos la tabla. 
+        # NOTA: st.dataframe no permite crear filas de cabecera extra (celdas combinadas),
+        # pero al usar nombres como "Potencia: X" y "Energía: Y", 
+        # obtienes el mismo resultado visual de agrupación.
         st.dataframe(df_final, use_container_width=True)
         
         csv = df_final.to_csv(index=False).encode('utf-8')
