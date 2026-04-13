@@ -12,40 +12,35 @@ def obtener_datos():
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/147.0.0.0",
         "Referer": "https://www.simuladorfacturaluz.es/tarifas-de-luz/"
     }
-    
-    try:
-        response = requests.get(url, headers=headers, timeout=20)
-        if response.status_code == 200:
-            html_io = io.StringIO(response.text)
-            tablas = pd.read_html(html_io)
-            if tablas:
-                return tablas[0], None
-            return None, "No se encontraron tablas en la respuesta."
-        return None, f"Error HTTP {response.status_code}"
-    except Exception as e:
-        return None, str(e)
+    response = requests.get(url, headers=headers, timeout=20)
+    html_io = io.StringIO(response.text)
+    return pd.read_html(html_io)[0]
 
-if st.button('Obtener Tarifas'):
-    with st.spinner('Procesando...'):
-        df, error = obtener_datos()
+if st.button('Procesar y Limpiar Tarifas'):
+    df = obtener_datos()
+    
+    # Lista para almacenar las filas limpias
+    datos_limpios = []
+    compania_actual = None
+    
+    # Iteramos sobre la tabla original para reconstruirla
+    for _, fila in df.iterrows():
+        # Asumimos que si la columna 'Tarifa' (índice 2) es 'None', 
+        # podría ser una fila de compañía o una fila vacía
+        valor_tarifa = str(fila.iloc[2])
         
-        if error:
-            st.error(error)
-        else:
-            # 1. Mostrar la tabla original intacta (como querías)
-            st.subheader("Tabla Original")
-            st.dataframe(df, use_container_width=True)
+        # Si la fila tiene un nombre de compañía (podemos detectar esto si tiene sentido)
+        # o simplemente ignoramos las filas que son puramente 'None'
+        if valor_tarifa != 'None' and 'Potencia' in str(fila.iloc[3]):
+            datos_limpios.append({
+                "Tarifa": valor_tarifa,
+                "Detalles": fila.iloc[3] # Aquí están tus precios
+            })
             
-            # 2. Crear la tabla filtrada:
-            # Seleccionamos la primera columna (iloc[:, 0]) y comprobamos que no sea "None"
-            # Usamos astype(str) para asegurar que comparamos texto
-            primera_col = df.iloc[:, 0].astype(str).str.lower()
-            df_filtrada = df[primera_col != 'none']
-            
-            # 3. Mostrar la tabla nueva filtrada
-            st.subheader("Tabla Filtrada (Sin filas con 'None' en la primera columna)")
-            st.dataframe(df_filtrada, use_container_width=True)
-            
-            # Botón de descarga para la tabla filtrada
-            csv = df_filtrada.to_csv(index=False).encode('utf-8')
-            st.download_button("Descargar CSV Filtrado", csv, "tarifas_filtradas.csv", "text/csv")
+    df_limpio = pd.DataFrame(datos_limpios)
+    
+    st.subheader("Tabla Final Limpia")
+    st.dataframe(df_limpio, use_container_width=True)
+    
+    csv = df_limpio.to_csv(index=False).encode('utf-8')
+    st.download_button("Descargar CSV Limpio", csv, "tarifas_limpias.csv", "text/csv")
