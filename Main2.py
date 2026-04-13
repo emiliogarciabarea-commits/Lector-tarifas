@@ -61,7 +61,7 @@ if st.button('🚀 Generar Tabla y Archivos'):
             if "potencia" not in detalles.lower(): continue
 
             #nombre_final = normalizar_nombre(compania_raw)
-            excluir = ["indexado", "3.0td", "bv", "estabanell", "bonpreu", "electra", "som", "pvpc", "(indexado)", "PVPC"]
+            excluir = ["indexado", "3.0td", "bv", "estabanell", "bonpreu", "electra", "som", "pvpc"]
             if any(palabra in detalles.lower() for palabra in excluir):
                 continue
             nombre_final = normalizar_nombre(compania_raw)
