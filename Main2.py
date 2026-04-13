@@ -5,7 +5,7 @@ import io
 import re
 
 st.set_page_config(page_title="Extractor Tarifas", layout="wide")
-st.title("📊 Extractor de Tarifas de Luz - Versión Anti-Error FV")
+st.title("📊 Extractor de Tarifas de Luz - Versión Final")
 
 def obtener_datos():
     url = "https://www.simuladorfacturaluz.es/sfl_api/?func=get_html_tarifas_luz"
@@ -50,9 +50,17 @@ if st.button('Generar Tabla Completa'):
 
         df_final = pd.DataFrame(datos_finales)
         
-        # --- AQUÍ ELIMINAMOS LA COLUMNA P3 ---
+        # --- NUEVAS ACCIONES DE LIMPIEZA ---
+        
+        # 1. Eliminar la fila 0 (si existe)
+        if not df_final.empty:
+            df_final = df_final.iloc[1:]
+            
+        # 2. Eliminar la columna P3
         if 'P3' in df_final.columns:
             df_final = df_final.drop(columns=['P3'])
+        
+        # -----------------------------------
         
         st.dataframe(df_final, use_container_width=True)
         
