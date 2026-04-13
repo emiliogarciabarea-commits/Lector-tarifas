@@ -67,7 +67,7 @@ if st.button('Generar Tabla Completa'):
                 "estabanell", 
                 "bonpreu",
                 "electra",
-                "som energia"
+                "som"
             ]
             
             if any(termino in nombre_check for termino in excluir):
