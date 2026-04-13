@@ -1,49 +1,49 @@
 import streamlit as st
 import pandas as pd
 import requests
-import json
+import io
 import re
 
-st.set_page_config(page_title="Extractor Tarifas", layout="wide")
-st.title("📊 Extractor de Tarifas de Luz")
+# ... (Configuración y obtener_datos igual que antes)
 
-def obtener_datos_limpios():
-    # URL de la API
-    url = "https://www.simuladorfacturaluz.es/sfl_api/?func=get_html_tarifas_luz"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
-        "Referer": "https://www.simuladorfacturaluz.es/tarifas-de-luz/"
-    }
+def extraer_precio(texto, patron):
+    # Patrón más flexible:
+    # 1. Busca el nombre (patron)
+    # 2. Permite cualquier cosa en medio (.*? )
+    # 3. Busca el número (incluyendo posibles símbolos € o espacios)
+    regex = f"{patron}.*?([\d]+(?:[\.,][\d]+)?)"
+    match = re.search(regex, texto, re.IGNORECASE)
+    if match:
+        return float(match.group(1).replace(',', '.'))
+    return None
+
+if st.button('Generar Tabla Formateada'):
+    df = obtener_datos()
+    datos_finales = []
     
-    try:
-        response = requests.get(url, headers=headers, timeout=20)
-        # Extraemos el contenido como texto
-        texto = response.text
+    for _, fila in df.iterrows():
+        tarifa = str(fila.iloc[2])
+        detalles = str(fila.iloc[3])
         
-        # En lugar de usar read_html, usamos expresiones regulares para buscar los datos
-        # Esto es mucho más robusto frente a errores de formato
-        # Buscamos los bloques de tarifas (asumiendo un patrón común en la web)
-        tarifas = re.findall(r'title="([^"]*)"', texto)
-        
-        datos = []
-        for t in tarifas:
-            if "Potencia" in t or "P1" in t:
-                datos.append({"Info": t})
-        
-        if not datos:
-            return None, "No se encontraron datos estructurados. El formato de la web cambió."
+        if tarifa != 'None' and 'Potencia' in detalles:
+            # DEBUG: DESCOMENTA LA SIGUIENTE LÍNEA PARA VER QUÉ DETALLES LLEGAN
+            # st.text(f"Analizando: {detalles}") 
             
-        return pd.DataFrame(datos), None
-    except Exception as e:
-        return None, str(e)
-
-if st.button('Obtener Tarifas'):
-    with st.spinner('Procesando...'):
-        df, error = obtener_datos_limpios()
-        
-        if error:
-            st.error(error)
-        else:
-            st.dataframe(df, use_container_width=True)
-            csv = df.to_csv(index=False).encode('utf-8')
-            st.download_button("Descargar CSV", csv, "tarifas.csv", "text/csv")
+            p1 = extraer_precio(detalles, "P1")
+            p2 = extraer_precio(detalles, "P2") or p1
+            p3 = extraer_precio(detalles, "P3") or p2
+            e1 = extraer_precio(detalles, "E1")
+            e2 = extraer_precio(detalles, "E2") or e1
+            e3 = extraer_precio(detalles, "E3") or e2
+            
+            # Buscamos FV específicamente
+            # A veces aparece como "Fv" o "FV"
+            fv = extraer_precio(detalles, "Fv") or 0.0
+            
+            datos_finales.append({
+                "Tarifa": tarifa, "P1": p1, "P2": p2, "P3": p3,
+                "E1": e1, "E2": e2, "E3": e3, "FV": fv
+            })
+            
+    df_final = pd.DataFrame(datos_finales)
+    st.dataframe(df_final, use_container_width=True)
