@@ -5,9 +5,9 @@ import io
 import re
 
 st.set_page_config(page_title="Extractor Tarifas", layout="wide")
-st.title("📊 Extractor de Tarifas de Luz - Formato Excel Exacto")
+st.title("📊 Extractor de Tarifas de Luz - Base de Datos Completa")
 
-# Base de datos de nombres extraída de tu Excel
+# La lista que acabamos de extraer
 DB_NOMBRES = [
     "Iberdrola Plan Online", "Iberdrola Plan Online 3 periodos", "Iberdrola Plan Más Ahorro",
     "Iberdrola Plan Estable", "Iberdrola Plan Verano", "Iberdrola Plan Solar",
@@ -36,7 +36,7 @@ def limpiar_y_extraer(texto, patron):
 
 def normalizar_con_db(nombre_web):
     nombre_web = " ".join(str(nombre_web).split())
-    # Comparar primeras 3 palabras
+    # Tomamos las 3 primeras palabras para comparar
     palabras_web = nombre_web.lower().split()[:3]
     inicio_web = " ".join(palabras_web)
 
@@ -45,8 +45,8 @@ def normalizar_con_db(nombre_web):
         inicio_db = " ".join(palabras_db)
         if inicio_web == inicio_db:
             return nombre_limpio
-    
-    # Si no hay match, devolver nombre limpio sin fechas
+            
+    # Si no está en la DB, quitamos fechas y devolvemos original limpio
     return re.split(r'\d{2}\s\w{3}\s\d{4}', nombre_web)[0].strip()
 
 if st.button('Generar Tabla Completa'):
@@ -60,8 +60,8 @@ if st.button('Generar Tabla Completa'):
             compania = normalizar_con_db(fila.iloc[2])
             detalles = str(fila.iloc[3])
             
-            # Filtros requeridos
-            if any(x in compania.lower() for x in ["indexado", "3.0td"]):
+            # FILTROS ACTIVOS: Indexado y 3.0TD
+            if "indexado" in compania.lower() or "3.0td" in compania.lower():
                 continue
             
             if compania != 'nan' and 'Potencia' in detalles:
@@ -76,27 +76,20 @@ if st.button('Generar Tabla Completa'):
                 
                 datos_finales.append({
                     "Compañía suministradora": compania,
-                    "Periodo Punta": p1,
-                    "Periodo Valle": p2,
-                    "Periodo Punta ": e1, # Espacio para diferenciar columnas
-                    "Periodo Llano": e2,
-                    "Periodo Valle ": e3,
-                    "Precio Excedentes en €/kWh": fv
+                    "Potencia: Periodo Punta": p1,
+                    "Potencia: Periodo Valle": p2,
+                    "Energía: Periodo Punta": e1,
+                    "Energía: Periodo Llano": e2,
+                    "Energía: Periodo Valle": e3,
+                    "Precio Excedentes (€/kWh)": fv
                 })
 
         df_final = pd.DataFrame(datos_finales)
-        
         if not df_final.empty:
             df_final = df_final.iloc[1:].reset_index(drop=True)
             st.dataframe(df_final, use_container_width=True)
+            csv = df_final.to_csv(index=False).encode('utf-8')
+            st.download_button("Descargar CSV Final", csv, "tarifas_limpias.csv", "text/csv")
             
-            # Generar Excel
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df_final.to_excel(writer, index=False, sheet_name='Tarifas')
-            
-            st.download_button("📥 Descargar Excel Actualizado", output.getvalue(), 
-                               "tarifas_actualizadas.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        
     except Exception as e:
         st.error(f"Error técnico: {e}")
