@@ -43,8 +43,8 @@ if st.button('Generar Tabla Completa'):
             
             detalles = str(fila.iloc[3])
             
-            # FILTRO: Si "Indexado" está en el nombre, saltamos
-            if "indexado" in compania.lower():
+            # FILTROS: Si "Indexado" o "3.0TD" está en el nombre, saltamos
+            if "indexado" in compania.lower() or "3.0td" in compania.lower():
                 continue
             
             if compania != 'nan' and 'Potencia' in detalles:
