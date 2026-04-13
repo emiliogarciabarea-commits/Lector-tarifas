@@ -50,11 +50,11 @@ if st.button('Generar Tabla Completa'):
                 # Nota: Si los nombres se repiten, pandas añadirá .1, .2 para diferenciarlos
                 datos_finales.append({
                     "Compañía suministradora": compania,
-                    "Periodo Punta": p1,
-                    "Periodo Valle": p2,
-                    "Periodo Punta": e1,
-                    "Periodo Llano": e2,
-                    "Periodo Valle": e3,
+                    "Periodo Punta (Potencia)": p1,
+                    "Periodo Valle (Potencia)": p2,
+                    "Periodo Punta (Energía)": e1,
+                    "Periodo Llano (Energía)": e2,
+                    "Periodo Valle (Energía)": e3,
                     "FV": fv
                 })
 
