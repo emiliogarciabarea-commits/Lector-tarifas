@@ -5,7 +5,7 @@ import io
 import re
 
 st.set_page_config(page_title="Extractor Tarifas", layout="wide")
-st.title("📊 Extractor de Tarifas de Luz - Versión Final")
+st.title("📊 Extractor de Tarifas de Luz - Versión Excel Match")
 
 def obtener_datos():
     url = "https://www.simuladorfacturaluz.es/sfl_api/?func=get_html_tarifas_luz"
@@ -21,12 +21,27 @@ def limpiar_y_extraer(texto, patron):
     return None
 
 def normalizar_nombre(nombre):
-    # 1. Eliminar espacios en blanco extra al principio y al final
-    # 2. Reemplazar saltos de línea o múltiples espacios por uno solo
+    # 1. Limpieza básica de espacios y saltos de línea
     nombre_limpio = " ".join(str(nombre).split())
-    # 3. (Opcional) Si en tu Excel solo quieres "Iberdrola Plan Online" 
-    # y la web trae fechas, puedes usar regex para cortar antes de la fecha.
+    
+    # 2. Cortar fechas (ej: 31 Mar 2026)
     nombre_limpio = re.split(r'\d{2}\s\w{3}\s\d{4}', nombre_limpio)[0].strip()
+    
+    # 3. MAPEO ESPECÍFICO PARA TU EXCEL
+    # Aquí añadimos las reglas para que coincida exactamente con tus nombres
+    reemplazos = {
+        "Naturgy Por Uso": "Naturgy Uso Luz",
+        "Naturgy Tarifa Uso Luz": "Naturgy Uso Luz",
+        "TotalEnergies A Tu Aire Siempre": "TotalEnergies A tu Aire Siempre",
+        "Gana Energía": "Gana Energia",
+        "Endesa Tarifa Conecta": "Endesa Conecta",
+        # Puedes añadir aquí cualquier otro que veas diferente
+    }
+    
+    for original, destino in reemplazos.items():
+        if original in nombre_limpio:
+            return destino
+            
     return nombre_limpio
 
 if st.button('Generar Tabla Completa'):
@@ -37,10 +52,8 @@ if st.button('Generar Tabla Completa'):
         for _, fila in df.iterrows():
             if len(fila) < 4: continue
             
-            # Aplicamos la normalización al nombre de la compañía
             compania_raw = str(fila.iloc[2])
             compania = normalizar_nombre(compania_raw)
-            
             detalles = str(fila.iloc[3])
             
             # FILTRO: Si "Indexado" está en el nombre, saltamos
@@ -54,7 +67,6 @@ if st.button('Generar Tabla Completa'):
                 e2 = limpiar_y_extraer(detalles, "E2") or e1
                 e3 = limpiar_y_extraer(detalles, "E3") or e2
                 
-                # Lógica FV exacta
                 match_fv = re.search(r"FV\.EXC:\s*([\d]+[\.,][\d]+)\s*€/kWh", detalles, re.IGNORECASE)
                 fv = float(match_fv.group(1).replace(',', '.')) if match_fv else 0.0
                 
@@ -71,7 +83,8 @@ if st.button('Generar Tabla Completa'):
         df_final = pd.DataFrame(datos_finales)
         
         if not df_final.empty:
-            df_final = df_final.iloc[1:] # Eliminar fila 0 (Generalmente encabezados basura)
+            # Quitamos la fila 0 de la extracción web
+            df_final = df_final.iloc[1:].reset_index(drop=True)
         
         st.dataframe(df_final, use_container_width=True)
         
