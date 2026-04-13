@@ -28,10 +28,11 @@ if st.button('Generar Tabla Completa'):
         for _, fila in df.iterrows():
             if len(fila) < 4: continue
             
-            tarifa = str(fila.iloc[2])
+            # Cambiamos el nombre de la variable para que sea más claro
+            compania = str(fila.iloc[2])
             detalles = str(fila.iloc[3])
             
-            if tarifa != 'nan' and 'Potencia' in detalles:
+            if compania != 'nan' and 'Potencia' in detalles:
                 p1 = limpiar_y_extraer(detalles, "P1")
                 p2 = limpiar_y_extraer(detalles, "P2") or p1
                 p3 = limpiar_y_extraer(detalles, "P3") or p2
@@ -39,28 +40,24 @@ if st.button('Generar Tabla Completa'):
                 e2 = limpiar_y_extraer(detalles, "E2") or e1
                 e3 = limpiar_y_extraer(detalles, "E3") or e2
                 
-                # FV infalible
+                # Lógica FV
                 match_fv = re.search(r"FV\.EXC:\s*([\d]+[\.,][\d]+)\s*€/kWh", detalles, re.IGNORECASE)
                 fv = float(match_fv.group(1).replace(',', '.')) if match_fv else 0.0
                 
                 datos_finales.append({
-                    "Tarifa": tarifa, "P1": p1, "P2": p2, "P3": p3,
+                    "Compañía suministradora": compania, # Nombre actualizado
+                    "P1": p1, "P2": p2, "P3": p3,
                     "E1": e1, "E2": e2, "E3": e3, "FV": fv
                 })
 
         df_final = pd.DataFrame(datos_finales)
         
-        # --- NUEVAS ACCIONES DE LIMPIEZA ---
-        
-        # 1. Eliminar la fila 0 (si existe)
+        # Limpiezas finales solicitadas:
         if not df_final.empty:
-            df_final = df_final.iloc[1:]
+            df_final = df_final.iloc[1:] # Eliminar fila 0
             
-        # 2. Eliminar la columna P3
         if 'P3' in df_final.columns:
-            df_final = df_final.drop(columns=['P3'])
-        
-        # -----------------------------------
+            df_final = df_final.drop(columns=['P3']) # Eliminar columna P3
         
         st.dataframe(df_final, use_container_width=True)
         
