@@ -72,7 +72,7 @@ if st.button('Generar Tabla Completa'):
             
             # --- SECCIÓN DE FILTROS ACTUALIZADA ---
             nombre_check = compania.lower()
-            excluir = ["indexado", "3.0td", "bv", "estabanell", "bonpreu", "electra", "som", "PVPC"]
+            excluir = ["indexado", "3.0td", "bv", "estabanell", "bonpreu", "electra", "som", "pvpc"]
             
             if any(termino in nombre_check for termino in excluir):
                 continue
