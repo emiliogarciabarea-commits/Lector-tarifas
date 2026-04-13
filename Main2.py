@@ -4,8 +4,8 @@ import requests
 import io
 import re
 
-st.set_page_config(page_title="Extractor Tarifas", layout="wide")
-st.title("📊 Extractor de Tarifas de Luz - Filtro Avanzado")
+st.set_page_config(page_title="Extractor Tarifas XML", layout="wide")
+st.title("📊 Extractor de Tarifas de Luz - Exportación XML")
 
 # Base de datos extraída de tu Excel
 DB_NOMBRES = [
@@ -47,6 +47,19 @@ def normalizar_con_db(nombre_web):
             
     return re.split(r'\d{2}\s\w{3}\s\d{4}', nombre_web)[0].strip()
 
+# Función para convertir DataFrame a XML con etiquetas válidas
+def to_xml(df):
+    xml = ['<Tarifas>']
+    for _, row in df.iterrows():
+        xml.append('  <Tarifa>')
+        for column in df.columns:
+            # Limpiamos el nombre de la columna para que sea una etiqueta XML válida (sin espacios ni caracteres raros)
+            tag = column.replace(":", "").replace("(", "").replace(")", "").replace("/", "").replace(" ", "_")
+            xml.append(f'    <{tag}>{row[column]}</{tag}>')
+        xml.append('  </Tarifa>')
+    xml.append('</Tarifas>')
+    return '\n'.join(xml)
+
 if st.button('Generar Tabla Completa'):
     try:
         df = obtener_datos()
@@ -58,21 +71,12 @@ if st.button('Generar Tabla Completa'):
             compania = normalizar_con_db(fila.iloc[2])
             detalles = str(fila.iloc[3])
             
-            # --- SECCIÓN DE FILTROS ACTUALIZADA ---
+            # --- SECCIÓN DE FILTROS ---
             nombre_check = compania.lower()
-            excluir = [
-                "indexado", 
-                "3.0td", 
-                "bv", 
-                "estabanell", 
-                "bonpreu",
-                "electra",
-                "som"
-            ]
+            excluir = ["indexado", "3.0td", "bv", "estabanell", "bonpreu", "electra", "som"]
             
             if any(termino in nombre_check for termino in excluir):
                 continue
-            # ---------------------------------------
             
             if compania != 'nan' and 'Potencia' in detalles:
                 p1 = limpiar_y_extraer(detalles, "P1")
@@ -97,13 +101,27 @@ if st.button('Generar Tabla Completa'):
         df_final = pd.DataFrame(datos_finales)
         
         if not df_final.empty:
-            # Saltamos la primera fila basura de la web y reseteamos índice
             df_final = df_final.iloc[1:].reset_index(drop=True)
             
+            # Mostrar tabla en la App
+            st.subheader("Vista previa de los datos")
             st.dataframe(df_final, use_container_width=True)
             
-            csv = df_final.to_csv(index=False).encode('utf-8')
-            st.download_button("Descargar CSV Final", csv, "tarifas_limpias.csv", "text/csv")
+            # Botones de descarga
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                csv = df_final.to_csv(index=False).encode('utf-8')
+                st.download_button("📥 Descargar CSV", csv, "tarifas.csv", "text/csv")
+            
+            with col2:
+                # Generar XML
+                xml_data = to_xml(df_final)
+                st.download_button("📑 Descargar XML", xml_data, "tarifas.xml", "application/xml")
+                
+                # Mostrar el XML en texto por si quieres copiarlo directamente
+                with st.expander("Ver código XML generado"):
+                    st.code(xml_data, language='xml')
             
     except Exception as e:
         st.error(f"Error técnico: {e}")
