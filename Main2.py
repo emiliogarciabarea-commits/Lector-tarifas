@@ -13,7 +13,7 @@ DB_NOMBRES = [
     "Iberdrola Plan Estable", "Iberdrola Plan Verano", "Iberdrola Plan Solar",
     "Iberdrola Plan Ahorro Solar", "Iberdrola Plan Ahorro Inteligente",
     "Endesa Tarifa Fija 24H Online", "Endesa Tarifa Fija 24h Promo", "Endesa Conecta Luz",
-    "Endesa One Luz", "Endesa Conecta Luz 3 Periodos", "Endesa Tempo Happy 2Horas",
+    "Endesa Conecta Luz 3 Periodos",
     "Endesa Tempo Happy 50Horas", "Endesa Tempo Happy Domingos", "Naturgy Uso Luz",
     "Naturgy Tarifa Noche", "Naturgy Solar", "Repsol Ahorro Plus", "Repsol Ahorro Potencia",
     "Repsol Tarifa Solar", "Repsol Tranquilísima", "TotalEnergies A tu Aire Siempre",
