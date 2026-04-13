@@ -23,7 +23,7 @@ DB_NOMBRES = [
 
 def obtener_datos():
     url = "https://www.simuladorfacturaluz.es/sfl_api/?func=get_html_tarifas_luz"
-    headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://www.simuladorfacturaluz.es/tarifas-de-luz/"}
+    headers = {"User-Agent": "Mozilla/5.0"}
     try:
         response = requests.get(url, headers=headers, timeout=20)
         tablas = pd.read_html(io.StringIO(response.text))
@@ -32,94 +32,75 @@ def obtener_datos():
         return pd.DataFrame()
 
 def extraer_numero_seguro(texto, patron):
-    """Extrae números de forma segura. Si falla o no existe, devuelve 0.0"""
+    """Extrae números de forma segura. Si el patrón no existe, devuelve 0.0."""
     try:
         if not texto or pd.isna(texto): return 0.0
+        # Buscamos el patrón y capturamos el número siguiente
         match = re.search(f"{patron}.*?(\d+[\.,]\d+)", str(texto), re.IGNORECASE)
-        if match:
-            return float(match.group(1).replace(',', '.'))
+        return float(match.group(1).replace(',', '.')) if match else 0.0
     except:
-        pass
-    return 0.0
+        return 0.0
 
 def normalizar_nombre(nombre_raw):
     nombre_limpio = " ".join(str(nombre_raw).split()).strip()
-    nombre_limpio = re.split(r'\d{2}\s\w{3}\s\d{4}', nombre_limpio)[0].strip()
-    for db_n in DB_NOMBRES:
-        if db_n.lower() in nombre_limpio.lower() or nombre_limpio.lower() in db_n.lower():
-            return db_n
     return nombre_limpio
 
-if st.button('🚀 Generar Tabla y Archivos'):
-    df_web = obtener_datos()
-    
-    if not df_web.empty:
-        datos_procesados = []
+if st.button('🚀 Generar Tabla y Descargar'):
+    with st.spinner('Procesando datos...'):
+        df_web = obtener_datos()
         
-        for _, fila in df_web.iterrows():
-            if len(fila) < 4: continue
+        if not df_web.empty:
+            datos_procesados = []
             
-            compania_raw = fila.iloc[2]
-            detalles = str(fila.iloc[3])
-            
-            if "potencia" not in detalles.lower(): continue
+            for _, fila in df_web.iterrows():
+                if len(fila) < 4: continue
+                
+                compania_raw = fila.iloc[2]
+                detalles = str(fila.iloc[3])
+                
+                # Filtro de seguridad: solo procesamos filas con datos reales
+                if "potencia" not in detalles.lower(): continue
 
-            nombre_final = normalizar_nombre(compania_raw)
-            
-            # Filtros de exclusión
-            excluir = ["indexado", "3.0td", "bv", "estabanell", "bonpreu", "electra", "som", "pvpc"]
-            if any(x in nombre_final.lower() for x in excluir): continue
-            
-            # Extracción de valores
-            p1 = extraer_numero_seguro(detalles, "P1")
-            p2 = extraer_numero_seguro(detalles, "P2") or p1
-            e1 = extraer_numero_seguro(detalles, "E1")
-            e2 = extraer_numero_seguro(detalles, "E2") or e1
-            e3 = extraer_numero_seguro(detalles, "E3") or e2
-            fv = extraer_numero_seguro(detalles, "FV.EXC")
-            
-            datos_procesados.append([nombre_final, p1, p2, e1, e2, e3, fv])
+                # Extracción segura de valores
+                p1 = extraer_numero_seguro(detalles, "P1")
+                p2 = extraer_numero_seguro(detalles, "P2") or p1
+                e1 = extraer_numero_seguro(detalles, "E1")
+                e2 = extraer_numero_seguro(detalles, "E2") or e1
+                e3 = extraer_numero_seguro(detalles, "E3") or e2
+                fv = extraer_numero_seguro(detalles, "FV\.EXC") # <--- BLINDADO AQUÍ
+                
+                datos_procesados.append([compania_raw, p1, p2, e1, e2, e3, fv])
 
-        # Estructura MultiIndex para Excel (Idéntica a tu imagen)
-        columnas = pd.MultiIndex.from_tuples([
-            ("", "Compañía suministradora"),
-            ("Coste término de Potencia en €/kWdia", "Periodo Punta"),
-            ("Coste término de Potencia en €/kWdia", "Periodo Valle"),
-            ("Coste término de Energía en €/kWh", "Periodo Punta"),
-            ("Coste término de Energía en €/kWh", "Periodo Llano"),
-            ("Coste término de Energía en €/kWh", "Periodo Valle"),
-            ("", "Precio Excedentes en €/kWh")
-        ])
+            # Estructura MultiIndex
+            columnas = pd.MultiIndex.from_tuples([
+                ("", "Compañía suministradora"),
+                ("Coste término de Potencia en €/kWdia", "Periodo Punta"),
+                ("Coste término de Potencia en €/kWdia", "Periodo Valle"),
+                ("Coste término de Energía en €/kWh", "Periodo Punta"),
+                ("Coste término de Energía en €/kWh", "Periodo Llano"),
+                ("Coste término de Energía en €/kWh", "Periodo Valle"),
+                ("", "Precio Excedentes en €/kWh")
+            ])
 
-        df_final = pd.DataFrame(datos_procesados, columns=columnas)
-        df_final = df_final.drop_duplicates().reset_index(drop=True)
+            df_final = pd.DataFrame(datos_procesados, columns=columnas)
+            df_final = df_final.drop_duplicates().reset_index(drop=True)
 
-        if not df_final.empty:
-            st.success(f"¡Se han extraído {len(df_final)} tarifas!")
-            st.dataframe(df_final, use_container_width=True)
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # EXPORTAR EXCEL PROFESIONAL
+            if not df_final.empty:
+                st.dataframe(df_final, use_container_width=True)
+                
+                col1, col2 = st.columns(2)
+                
+                # Excel
                 output_excel = io.BytesIO()
                 with pd.ExcelWriter(output_excel, engine='xlsxwriter') as writer:
-                    df_final.to_excel(writer, index=False, sheet_name='Tarifas')
-                    workbook = writer.book
-                    worksheet = writer.sheets['Tarifas']
-                    worksheet.set_column(0, 0, 35)
-                    worksheet.set_column(1, 6, 15)
+                    df_final.to_excel(writer, index=False)
+                col1.download_button("📥 Descargar Excel", output_excel.getvalue(), "tarifas.xlsx")
                 
-                st.download_button("📥 Descargar Excel (.xlsx)", output_excel.getvalue(), "tarifas_luz.xlsx")
-
-            with col2:
-                # EXPORTAR DOCUMENTO DE TEXTO
+                # Texto plano
                 buffer_txt = io.StringIO()
-                buffer_txt.write("LISTADO DE TARIFAS ELÉCTRICAS\n" + "="*40 + "\n\n")
                 buffer_txt.write(df_final.to_string(index=False))
-                
-                st.download_button("📄 Descargar Documento de Texto (.txt)", buffer_txt.getvalue(), "tarifas_luz.txt")
+                col2.download_button("📄 Descargar TXT", buffer_txt.getvalue(), "tarifas.txt")
+            else:
+                st.warning("No se encontraron tarifas válidas.")
         else:
-            st.warning("No se encontraron tarifas válidas.")
-    else:
-        st.error("No se pudo conectar con la fuente de datos.")
+            st.error("No se pudieron obtener datos de la web.")
