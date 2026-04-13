@@ -38,13 +38,11 @@ def normalizar_con_db(nombre_web):
     nombre_web = " ".join(str(nombre_web).split())
     palabras_web = nombre_web.lower().split()[:3]
     inicio_web = " ".join(palabras_web)
-
     for nombre_limpio in DB_NOMBRES:
         palabras_db = nombre_limpio.lower().split()[:3]
         inicio_db = " ".join(palabras_db)
         if inicio_web == inicio_db:
             return nombre_limpio
-            
     return re.split(r'\d{2}\s\w{3}\s\d{4}', nombre_web)[0].strip()
 
 def to_xml(df):
@@ -52,7 +50,7 @@ def to_xml(df):
     for _, row in df.iterrows():
         xml.append('  <Tarifa>')
         for col in df.columns:
-            # Usamos el nombre del segundo nivel para las etiquetas XML
+            # Usamos el segundo nivel del MultiIndex para el nombre de la etiqueta
             tag = str(col[1]).replace(" ", "_").replace("á", "a").replace("ñ", "n").replace("í", "i").replace("(", "").replace(")", "").replace("/", "")
             xml.append(f'    <{tag}>{row[col]}</{tag}>')
         xml.append('  </Tarifa>')
@@ -70,10 +68,9 @@ if st.button('Generar Tabla Completa'):
             compania = normalizar_con_db(fila.iloc[2])
             detalles = str(fila.iloc[3])
             
-            # --- SECCIÓN DE FILTROS ACTUALIZADA ---
+            # FILTROS
             nombre_check = compania.lower()
             excluir = ["indexado", "3.0td", "bv", "estabanell", "bonpreu", "electra", "som", "pvpc"]
-            
             if any(termino in nombre_check for termino in excluir):
                 continue
             
@@ -89,7 +86,7 @@ if st.button('Generar Tabla Completa'):
                 
                 datos_finales.append([compania, p1, p2, e1, e2, e3, fv])
 
-        # --- ESTRUCTURA DE COLUMNAS DOBLES (Igual al adjunto) ---
+        # ESTRUCTURA DE COLUMNAS DOBLES EXACTA
         columnas = pd.MultiIndex.from_tuples([
             ("", "Compañía suministradora"),
             ("Coste término de Potencia en €/kWdia", "Periodo Punta"),
@@ -103,7 +100,6 @@ if st.button('Generar Tabla Completa'):
         df_final = pd.DataFrame(datos_finales, columns=columnas)
         
         if not df_final.empty:
-            # Saltamos la primera fila basura de la web
             df_final = df_final.reset_index(drop=True)
             
             st.subheader("Vista previa de la tabla limpia")
@@ -112,19 +108,28 @@ if st.button('Generar Tabla Completa'):
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                # Exportar Excel (.xlsx)
+                # --- GENERACIÓN EXCEL CON FORMATO ---
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    df_final.to_excel(writer, index=False)
-                st.download_button("📥 Descargar Excel (.xlsx)", output.getvalue(), "tarifas_limpias.xlsx")
+                    df_final.to_excel(writer, index=False, sheet_name='Tarifas')
+                    workbook  = writer.book
+                    worksheet = writer.sheets['Tarifas']
+                    
+                    # Formato para centrar cabeceras
+                    header_format = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True, 'border': 1})
+                    
+                    # Ajuste de ancho de columnas
+                    worksheet.set_column(0, 0, 35) # Compañía
+                    worksheet.set_column(1, 5, 15) # Precios
+                    worksheet.set_column(6, 6, 25) # Excedentes
+                
+                st.download_button("📥 Descargar Excel (.xlsx)", output.getvalue(), "tarifas_limpias.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
             with col2:
-                # Exportar XML
                 xml_data = to_xml(df_final)
                 st.download_button("📑 Descargar XML", xml_data, "tarifas.xml", "application/xml")
             
             with col3:
-                # Exportar CSV original
                 csv = df_final.to_csv(index=False).encode('utf-8')
                 st.download_button("📄 Descargar CSV", csv, "tarifas.csv", "text/csv")
                 
