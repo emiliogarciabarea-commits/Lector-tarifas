@@ -5,59 +5,58 @@ import io
 import re
 
 st.set_page_config(page_title="Extractor Tarifas", layout="wide")
-st.title("📊 Extractor de Tarifas de Luz - Versión Anti-FBS")
+st.title("📊 Extractor de Tarifas de Luz - Versión a Prueba de Fallos")
 
-def obtener_datos():
-    url = "https://www.simuladorfacturaluz.es/sfl_api/?func=get_html_tarifas_luz"
-    headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://www.simuladorfacturaluz.es/tarifas-de-luz/"}
-    response = requests.get(url, headers=headers, timeout=20)
-    return pd.read_html(io.StringIO(response.text))[0]
-
-def limpiar_y_extraer(texto, patron):
-    # Regex para valores P1, E1, etc
-    regex = f"{patron}.*?[:\s]+([\d]+[\.,][\d]+)"
+def extraer_valor(texto, etiqueta):
+    # Busca la etiqueta, ignora el texto intermedio, y captura el número decimal
+    # El patrón [0-9]+[.,][0-9]+ asegura que SOLO coja números con decimales
+    regex = f"{etiqueta}.*?[:\s]+([0-9]+[.,][0-9]+)"
     match = re.search(regex, texto, re.IGNORECASE)
     if match:
         return float(match.group(1).replace(',', '.'))
-    return None
+    return 0.0
 
-if st.button('Generar Tabla Completa'):
+if st.button('Generar Tabla'):
     try:
-        df = obtener_datos()
-        datos_finales = []
+        url = "https://www.simuladorfacturaluz.es/sfl_api/?func=get_html_tarifas_luz"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url, timeout=20)
+        df = pd.read_html(io.StringIO(response.text))[0]
         
+        datos_limpios = []
+        
+        # Iteramos fila a fila
         for _, fila in df.iterrows():
-            if len(fila) < 4: continue
+            # Convertimos toda la fila a texto para evitar errores de tipo
+            texto_fila = " ".join([str(x) for x in fila.values])
             
-            tarifa = str(fila.iloc[2])
-            detalles_original = str(fila.iloc[3])
-            
-            if tarifa != 'nan' and 'Potencia' in detalles_original:
-                # PASO CRÍTICO: Eliminamos todo lo que hay tras "FBS" para que no exista para el buscador
-                detalles = re.split(r'FBS', detalles_original, flags=re.IGNORECASE)[0]
+            # Buscamos solo filas que tengan "Potencia"
+            if "Potencia" in texto_fila:
+                # Extraemos datos uno a uno
+                p1 = extraer_valor(texto_fila, "P1")
+                p2 = extraer_valor(texto_fila, "P2") or p1
+                p3 = extraer_valor(texto_fila, "P3") or p2
+                e1 = extraer_valor(texto_fila, "E1")
+                e2 = extraer_valor(texto_fila, "E2") or e1
+                e3 = extraer_valor(texto_fila, "E3") or e2
                 
-                p1 = limpiar_y_extraer(detalles, "P1")
-                p2 = limpiar_y_extraer(detalles, "P2") or p1
-                p3 = limpiar_y_extraer(detalles, "P3") or p2
-                e1 = limpiar_y_extraer(detalles, "E1")
-                e2 = limpiar_y_extraer(detalles, "E2") or e1
-                e3 = limpiar_y_extraer(detalles, "E3") or e2
+                # Para FV: buscamos FV o FV.EXC pero nos detenemos si viene FBS
+                # Cortamos el texto en FBS para que el buscador de FV no vea nada después
+                texto_corto = re.split(r'FBS', texto_fila, flags=re.IGNORECASE)[0]
+                fv = extraer_valor(texto_corto, "FV(?:\.EXC)?")
                 
-                # Buscamos FV estrictamente en el texto ya cortado
-                regex_fv = r"(?:FV\.EXC|FV)\s*[:\s]*([\d]+[\.,][\d]+)"
-                match_fv = re.search(regex_fv, detalles, detalles)
-                
-                # Forzamos la búsqueda de nuevo pero solo en el texto limpio de FBS
-                match_fv = re.search(r"(?:FV\.EXC|FV).*?[:\s]+([\d]+[\.,][\d]+)", detalles, re.IGNORECASE)
-                fv = float(match_fv.group(1).replace(',', '.')) if match_fv else 0.0
-                
-                datos_finales.append({
-                    "Tarifa": tarifa, "P1": p1, "P2": p2, "P3": p3,
+                datos_limpios.append({
+                    "Tarifa": str(fila.iloc[2]), 
+                    "P1": p1, "P2": p2, "P3": p3,
                     "E1": e1, "E2": e2, "E3": e3, "FV": fv
                 })
-
-        df_final = pd.DataFrame(datos_finales)
+        
+        # Creamos el DataFrame final
+        df_final = pd.DataFrame(datos_limpios)
         st.dataframe(df_final, use_container_width=True)
         
+        csv = df_final.to_csv(index=False).encode('utf-8')
+        st.download_button("Descargar CSV", csv, "tarifas.csv", "text/csv")
+        
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error técnico: {e}")
