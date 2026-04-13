@@ -31,8 +31,11 @@ def limpiar_y_extraer(texto, patron):
     regex = f"{patron}.*?[:\s]+([\d]+[\.,][\d]+)"
     match = re.search(regex, texto, re.IGNORECASE)
     if match:
-        return float(match.group(1).replace(',', '.'))
-    return None
+        try:
+            return float(match.group(1).replace(',', '.'))
+        except:
+            return 0.0
+    return 0.0
 
 def normalizar_con_db(nombre_web):
     nombre_web = " ".join(str(nombre_web).split())
@@ -50,7 +53,6 @@ def to_xml(df):
     for _, row in df.iterrows():
         xml.append('  <Tarifa>')
         for col in df.columns:
-            # Usamos el segundo nivel del MultiIndex para las etiquetas XML
             tag = str(col[1]).replace(" ", "_").replace("á", "a").replace("ñ", "n").replace("í", "i").replace("(", "").replace(")", "").replace("/", "")
             xml.append(f'    <{tag}>{row[col]}</{tag}>')
         xml.append('  </Tarifa>')
@@ -66,9 +68,9 @@ if st.button('Generar Tabla Completa'):
             if len(fila) < 4: continue
             
             compania = normalizar_con_db(fila.iloc[2])
-            detalles = str(fila.iloc[3])
+            detalles = str(fila.iloc[3]) if pd.notnull(fila.iloc[3]) else ""
             
-            # --- FILTROS DE EXCLUSIÓN ---
+            # --- FILTROS ---
             nombre_check = compania.lower()
             excluir = ["indexado", "3.0td", "bv", "estabanell", "bonpreu", "electra", "som", "pvpc"]
             if any(termino in nombre_check for termino in excluir):
@@ -81,18 +83,16 @@ if st.button('Generar Tabla Completa'):
                 e2 = limpiar_y_extraer(detalles, "E2") or e1
                 e3 = limpiar_y_extraer(detalles, "E3") or e2
                 
+                # CORRECCIÓN DEL FALLO NoneType:
                 match_fv = re.search(r"FV\.EXC:\s*([\d]+[\.,][\d]+)\s*€/kWh", detalles, re.IGNORECASE)
-
                 if match_fv:
-                    # Si encuentra el valor, lo limpia y convierte
                     fv = float(match_fv.group(1).replace(',', '.'))
                 else:
-                    # Si no encuentra el patrón (ej. tarifa sin excedentes), asigna 0.0
                     fv = 0.0
                 
                 datos_finales.append([compania, p1, p2, e1, e2, e3, fv])
 
-        # --- ESTRUCTURA DE COLUMNAS IDÉNTICA AL ADJUNTO ---
+        # --- ESTRUCTURA DE COLUMNAS DOBLES ---
         columnas = pd.MultiIndex.from_tuples([
             ("", "Compañía suministradora"),
             ("Coste término de Potencia en €/kWdia", "Periodo Punta"),
@@ -108,39 +108,28 @@ if st.button('Generar Tabla Completa'):
         if not df_final.empty:
             df_final = df_final.reset_index(drop=True)
             
-            st.subheader("Vista previa de la tabla (Formato Limpio)")
+            st.subheader("Vista previa de la tabla")
             st.dataframe(df_final, use_container_width=True)
             
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                # --- EXPORTACIÓN EXCEL PROFESIONAL (.XLSX) ---
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    # Al usar MultiIndex, Pandas y xlsxwriter combinan las celdas superiores automáticamente
                     df_final.to_excel(writer, index=False, sheet_name='Tarifas')
-                    
-                    workbook  = writer.book
+                    workbook = writer.book
                     worksheet = writer.sheets['Tarifas']
                     
-                    # Formato estético para las cabeceras
-                    header_format = workbook.add_format({
-                        'bold': True,
-                        'text_wrap': True,
-                        'valign': 'vcenter',
-                        'align': 'center',
-                        'border': 1
-                    })
-                    
-                    # Ajuste de ancho de columnas para que se vea igual que el archivo original
-                    worksheet.set_column(0, 0, 35) # Compañía
-                    worksheet.set_column(1, 5, 18) # Periodos
-                    worksheet.set_column(6, 6, 25) # Excedentes
+                    # Ajuste estético
+                    header_format = workbook.add_format({'bold': True, 'border': 1, 'align': 'center', 'valign': 'vcenter'})
+                    worksheet.set_column(0, 0, 35)
+                    worksheet.set_column(1, 5, 18)
+                    worksheet.set_column(6, 6, 25)
                 
                 st.download_button(
                     label="📥 Descargar Excel (.xlsx)",
                     data=output.getvalue(),
-                    file_name="tarifas_actualizadas.xlsx",
+                    file_name="tarifas_limpias.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
@@ -153,4 +142,4 @@ if st.button('Generar Tabla Completa'):
                 st.download_button("📄 Descargar CSV", csv, "tarifas.csv", "text/csv")
                 
     except Exception as e:
-        st.error(f"Error técnico: {e}")
+        st.error(f"Error técnico crítico: {e}")
