@@ -28,12 +28,16 @@ def obtener_datos():
     return pd.read_html(io.StringIO(response.text))[0]
 
 def limpiar_y_extraer(texto, patron):
+    """Función ultra-segura para extraer números sin romper el código"""
+    if not texto or texto == "nan":
+        return 0.0
+    # Busca el patrón y captura el número con coma o punto
     regex = f"{patron}.*?[:\s]+([\d]+[\.,][\d]+)"
     match = re.search(regex, texto, re.IGNORECASE)
     if match:
         try:
             return float(match.group(1).replace(',', '.'))
-        except:
+        except (ValueError, IndexError):
             return 0.0
     return 0.0
 
@@ -77,22 +81,24 @@ if st.button('Generar Tabla Completa'):
                 continue
             
             if compania != 'nan' and 'Potencia' in detalles:
+                # Extracción segura de todos los valores
                 p1 = limpiar_y_extraer(detalles, "P1")
-                p2 = limpiar_y_extraer(detalles, "P2") or p1
-                e1 = limpiar_y_extraer(detalles, "E1")
-                e2 = limpiar_y_extraer(detalles, "E2") or e1
-                e3 = limpiar_y_extraer(detalles, "E3") or e2
+                p2 = limpiar_y_extraer(detalles, "P2")
+                if p2 == 0.0: p2 = p1 # Backup si P2 no existe
                 
-                # CORRECCIÓN DEL FALLO NoneType:
-                match_fv = re.search(r"FV\.EXC:\s*([\d]+[\.,][\d]+)\s*€/kWh", detalles, re.IGNORECASE)
-                if match_fv:
-                    fv = float(match_fv.group(1).replace(',', '.'))
-                else:
-                    fv = 0.0
+                e1 = limpiar_y_extraer(detalles, "E1")
+                e2 = limpiar_y_extraer(detalles, "E2")
+                if e2 == 0.0: e2 = e1
+                
+                e3 = limpiar_y_extraer(detalles, "E3")
+                if e3 == 0.0: e3 = e2
+                
+                # Extracción segura de excedentes
+                fv = limpiar_y_extraer(detalles, r"FV\.EXC")
                 
                 datos_finales.append([compania, p1, p2, e1, e2, e3, fv])
 
-        # --- ESTRUCTURA DE COLUMNAS DOBLES ---
+        # --- ESTRUCTURA DE COLUMNAS DOBLES (MultiIndex) ---
         columnas = pd.MultiIndex.from_tuples([
             ("", "Compañía suministradora"),
             ("Coste término de Potencia en €/kWdia", "Periodo Punta"),
@@ -114,13 +120,14 @@ if st.button('Generar Tabla Completa'):
             col1, col2, col3 = st.columns(3)
             
             with col1:
+                # --- EXCEL IDÉNTICO A LA VISTA ---
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                     df_final.to_excel(writer, index=False, sheet_name='Tarifas')
                     workbook = writer.book
                     worksheet = writer.sheets['Tarifas']
                     
-                    # Ajuste estético
+                    # Formato y ajuste de columnas
                     header_format = workbook.add_format({'bold': True, 'border': 1, 'align': 'center', 'valign': 'vcenter'})
                     worksheet.set_column(0, 0, 35)
                     worksheet.set_column(1, 5, 18)
@@ -142,4 +149,4 @@ if st.button('Generar Tabla Completa'):
                 st.download_button("📄 Descargar CSV", csv, "tarifas.csv", "text/csv")
                 
     except Exception as e:
-        st.error(f"Error técnico crítico: {e}")
+        st.error(f"Error técnico: {e}")
