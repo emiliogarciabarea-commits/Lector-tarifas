@@ -5,7 +5,7 @@ import io
 import re
 
 st.set_page_config(page_title="Extractor Tarifas Profesional", layout="wide")
-st.title("📊 Extractor de Tarifas - Formato Excel Maestro")
+st.title("📊 Extractor de Tarifas de Luz - Formato Original")
 
 # Base de datos extraída de tu Excel
 DB_NOMBRES = [
@@ -52,14 +52,14 @@ def to_xml(df):
     for _, row in df.iterrows():
         xml.append('  <Tarifa>')
         for col in df.columns:
-            # Para el XML usamos el nombre del segundo nivel de la cabecera (Periodos)
-            tag = str(col[1]).replace(" ", "_").replace("á", "a").replace("ñ", "n").replace("í", "i")
+            # Usamos el nombre del segundo nivel para las etiquetas XML
+            tag = str(col[1]).replace(" ", "_").replace("á", "a").replace("ñ", "n").replace("í", "i").replace("(", "").replace(")", "").replace("/", "")
             xml.append(f'    <{tag}>{row[col]}</{tag}>')
         xml.append('  </Tarifa>')
     xml.append('</Tarifas>')
     return '\n'.join(xml)
 
-if st.button('Generar Tabla y Excel'):
+if st.button('Generar Tabla Completa'):
     try:
         df_web = obtener_datos()
         datos_finales = []
@@ -70,9 +70,10 @@ if st.button('Generar Tabla y Excel'):
             compania = normalizar_con_db(fila.iloc[2])
             detalles = str(fila.iloc[3])
             
-            # --- FILTROS ---
+            # --- SECCIÓN DE FILTROS ACTUALIZADA ---
             nombre_check = compania.lower()
             excluir = ["indexado", "3.0td", "bv", "estabanell", "bonpreu", "electra", "som"]
+            
             if any(termino in nombre_check for termino in excluir):
                 continue
             
@@ -88,7 +89,7 @@ if st.button('Generar Tabla y Excel'):
                 
                 datos_finales.append([compania, p1, p2, e1, e2, e3, fv])
 
-        # --- CREACIÓN DE ESTRUCTURA MULTINIVEL (IDÉNTICA A TU EXCEL) ---
+        # --- ESTRUCTURA DE COLUMNAS DOBLES (Igual al adjunto) ---
         columnas = pd.MultiIndex.from_tuples([
             ("", "Compañía suministradora"),
             ("Coste término de Potencia en €/kWdia", "Periodo Punta"),
@@ -102,29 +103,30 @@ if st.button('Generar Tabla y Excel'):
         df_final = pd.DataFrame(datos_finales, columns=columnas)
         
         if not df_final.empty:
-            # Saltamos la primera fila si es basura de la web
+            # Saltamos la primera fila basura de la web
             df_final = df_final.reset_index(drop=True)
             
-            st.subheader("Vista previa del formato limpio")
+            st.subheader("Vista previa de la tabla limpia")
             st.dataframe(df_final, use_container_width=True)
             
-            # --- EXPORTACIÓN A EXCEL (.XLSX) ---
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df_final.to_excel(writer, index=False)
-                # Auto-ajuste de columnas básico
-                worksheet = writer.sheets['Sheet1']
-                worksheet.set_column(0, 6, 20)
-
-            col1, col2 = st.columns(2)
-            with col1:
-                st.download_button("📥 Descargar Excel (.xlsx)", output.getvalue(), "tarifas_limpias.xlsx")
+            col1, col2, col3 = st.columns(3)
             
+            with col1:
+                # Exportar Excel (.xlsx)
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    df_final.to_excel(writer, index=False)
+                st.download_button("📥 Descargar Excel (.xlsx)", output.getvalue(), "tarifas_limpias.xlsx")
+
             with col2:
+                # Exportar XML
                 xml_data = to_xml(df_final)
                 st.download_button("📑 Descargar XML", xml_data, "tarifas.xml", "application/xml")
-                with st.expander("Ver código XML"):
-                    st.code(xml_data, language='xml')
-                    
+            
+            with col3:
+                # Exportar CSV original
+                csv = df_final.to_csv(index=False).encode('utf-8')
+                st.download_button("📄 Descargar CSV", csv, "tarifas.csv", "text/csv")
+                
     except Exception as e:
         st.error(f"Error técnico: {e}")
