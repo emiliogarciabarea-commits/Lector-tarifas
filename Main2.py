@@ -50,7 +50,7 @@ def to_xml(df):
     for _, row in df.iterrows():
         xml.append('  <Tarifa>')
         for col in df.columns:
-            # Usamos el segundo nivel del MultiIndex para el nombre de la etiqueta
+            # Usamos el segundo nivel del MultiIndex para el nombre de la etiqueta XML
             tag = str(col[1]).replace(" ", "_").replace("á", "a").replace("ñ", "n").replace("í", "i").replace("(", "").replace(")", "").replace("/", "")
             xml.append(f'    <{tag}>{row[col]}</{tag}>')
         xml.append('  </Tarifa>')
@@ -68,7 +68,7 @@ if st.button('Generar Tabla Completa'):
             compania = normalizar_con_db(fila.iloc[2])
             detalles = str(fila.iloc[3])
             
-            # FILTROS
+            # --- FILTROS ---
             nombre_check = compania.lower()
             excluir = ["indexado", "3.0td", "bv", "estabanell", "bonpreu", "electra", "som", "pvpc"]
             if any(termino in nombre_check for termino in excluir):
@@ -86,7 +86,7 @@ if st.button('Generar Tabla Completa'):
                 
                 datos_finales.append([compania, p1, p2, e1, e2, e3, fv])
 
-        # ESTRUCTURA DE COLUMNAS DOBLES EXACTA
+        # --- ESTRUCTURA DE MULTIINDEX (La que ves en la App) ---
         columnas = pd.MultiIndex.from_tuples([
             ("", "Compañía suministradora"),
             ("Coste término de Potencia en €/kWdia", "Periodo Punta"),
@@ -102,28 +102,29 @@ if st.button('Generar Tabla Completa'):
         if not df_final.empty:
             df_final = df_final.reset_index(drop=True)
             
-            st.subheader("Vista previa de la tabla limpia")
+            # Mostrar tabla en la App
+            st.subheader("Vista previa de la tabla")
             st.dataframe(df_final, use_container_width=True)
             
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                # --- GENERACIÓN EXCEL CON FORMATO ---
+                # --- DESCARGA EXCEL IDÉNTICA A LA VISTA ---
                 output = io.BytesIO()
+                # Usamos xlsxwriter para asegurar que el formato MultiIndex se mantenga limpio
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                     df_final.to_excel(writer, index=False, sheet_name='Tarifas')
-                    workbook  = writer.book
+                    # Opcional: Ajuste automático de columnas para que se vea bien al abrir
                     worksheet = writer.sheets['Tarifas']
-                    
-                    # Formato para centrar cabeceras
-                    header_format = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'bold': True, 'border': 1})
-                    
-                    # Ajuste de ancho de columnas
-                    worksheet.set_column(0, 0, 35) # Compañía
-                    worksheet.set_column(1, 5, 15) # Precios
-                    worksheet.set_column(6, 6, 25) # Excedentes
+                    for i, col in enumerate(df_final.columns):
+                        worksheet.set_column(i, i, 20)
                 
-                st.download_button("📥 Descargar Excel (.xlsx)", output.getvalue(), "tarifas_limpias.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button(
+                    label="📥 Descargar Excel (.xlsx)",
+                    data=output.getvalue(),
+                    file_name="tarifas_luz.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
 
             with col2:
                 xml_data = to_xml(df_final)
