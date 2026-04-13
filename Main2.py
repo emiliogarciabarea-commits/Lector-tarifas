@@ -60,9 +60,7 @@ if st.button('🚀 Generar Tabla y Archivos'):
             
             if "potencia" not in detalles.lower(): continue
 
-            if "pvpc" in detalles.lower():
-                continue
-                
+                            
             # 3. Resto de filtros de exclusión (Bonpreu, etc.)
             excluir = ["indexado", "3.0td", "bv", "estabanell", "bonpreu", "electra", "som"]
             texto_a_verificar = (str(compania_raw) + " " + detalles).lower()
