@@ -7,7 +7,7 @@ import re
 st.set_page_config(page_title="Extractor Tarifas", layout="wide")
 st.title("📊 Extractor de Tarifas de Luz - Base de Datos Completa")
 
-# La lista que acabamos de extraer
+# La lista extraída de tu Excel
 DB_NOMBRES = [
     "Iberdrola Plan Online", "Iberdrola Plan Online 3 periodos", "Iberdrola Plan Más Ahorro",
     "Iberdrola Plan Estable", "Iberdrola Plan Verano", "Iberdrola Plan Solar",
@@ -60,8 +60,10 @@ if st.button('Generar Tabla Completa'):
             compania = normalizar_con_db(fila.iloc[2])
             detalles = str(fila.iloc[3])
             
-            # FILTROS ACTIVOS: Indexado y 3.0TD
-            if "indexado" in compania.lower() or "3.0td" in compania.lower():
+            # FILTROS ACTIVOS: Indexado, 3.0TD y BV
+            # Convertimos a minúsculas para que el filtro sea robusto
+            nombre_check = compania.lower()
+            if "indexado" in nombre_check or "3.0td" in nombre_check or "bv" in nombre_check:
                 continue
             
             if compania != 'nan' and 'Potencia' in detalles:
